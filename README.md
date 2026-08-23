@@ -22,6 +22,10 @@ Read [docs/TECHNICAL_PLAN.md](docs/TECHNICAL_PLAN.md) for the phased build-out p
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system diagram, port map, and the
 hostname/routing detail that matters once you get to browser-level tests.
 
+**What's actually covered right now:** [docs/TEST_INVENTORY.md](docs/TEST_INVENTORY.md) — every
+test title, grouped by file, regenerated straight from the test source with `npm run
+docs:test-inventory` (never hand-edited; CI fails if it's out of sync with the tests it describes).
+
 ## Reports
 
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
