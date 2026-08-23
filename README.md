@@ -22,6 +22,13 @@ Read [docs/TECHNICAL_PLAN.md](docs/TECHNICAL_PLAN.md) for the phased build-out p
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system diagram, port map, and the
 hostname/routing detail that matters once you get to browser-level tests.
 
+## Reports
+
+Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
+suggestions for whatever the suite turned up on a given run. Latest:
+[2026-08-23-qa-findings.md](reports/2026-08-23-qa-findings.md) (3 confirmed issues, 46/48 checks
+passing).
+
 ## Quick start (local)
 
 Requires: Node 20+, Docker Desktop.
