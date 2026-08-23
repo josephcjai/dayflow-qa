@@ -1,0 +1,20 @@
+node_modules/
+dist/
+coverage/
+
+# Local pinned checkout of the dev repo (read-only clone, never committed)
+.dev-checkout/
+
+# Test artifacts
+playwright-report/
+test-results/
+*.log
+
+# Env files with real secrets (only .env.test.example is committed)
+.env.test
+.env.test.local
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

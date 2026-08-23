@@ -1,0 +1,25 @@
+{
+  "name": "dayflow-qa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Independent QA test repository for DayFlow — API/integration, web E2E, and (future) mobile UI tests, run against QA's own isolated stack.",
+  "type": "module",
+  "scripts": {
+    "checkout:dev-ref": "node scripts/checkout-dev-ref.mjs",
+    "stack:up": "npm run checkout:dev-ref && docker compose -f docker-compose.test.yml --env-file .env.test up -d --build && node scripts/wait-for-health.mjs",
+    "stack:down": "docker compose -f docker-compose.test.yml --env-file .env.test down -v",
+    "stack:logs": "docker compose -f docker-compose.test.yml --env-file .env.test logs -f",
+    "test:api": "vitest run",
+    "test:e2e": "playwright test",
+    "test": "npm run test:api && npm run test:e2e",
+    "contract:check": "node contract/check-contract-drift.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@types/node": "^20.12.7",
+    "dotenv": "^16.4.5",
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.0"
+  }
+}

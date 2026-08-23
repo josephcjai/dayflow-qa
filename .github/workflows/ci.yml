@@ -1,0 +1,75 @@
+name: QA regression suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly, so drift in the dev repo is caught even with no QA-side change that day.
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+  # Optional per docs/TECHNICAL_PLAN.md §9 — the dev repo can `repository_dispatch` this on
+  # merge to main, so the suite runs within minutes of a dev change instead of only nightly.
+  repository_dispatch:
+    types: [dayflow-main-merged]
+
+jobs:
+  contract-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run checkout:dev-ref
+      - run: npm run contract:check
+
+  api:
+    runs-on: ubuntu-latest
+    needs: contract-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: cp .env.test.example .env.test
+      - name: Bring up the QA stack (Postgres + API + nginx, isolated ports)
+        run: npm run stack:up
+      - name: Run API/integration suite
+        run: npm run test:api
+      - name: Tear down (always, even on failure)
+        if: always()
+        run: npm run stack:down
+
+  e2e-web:
+    runs-on: ubuntu-latest
+    needs: contract-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: cp .env.test.example .env.test
+      - name: Map dayflow-qa.local so the frontend's hostname check takes the relative-/api path
+        run: echo "127.0.0.1 dayflow-qa.local" | sudo tee -a /etc/hosts
+      - name: Bring up the QA stack
+        run: npm run stack:up
+      - name: Run web E2E suite
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+      - name: Tear down (always, even on failure)
+        if: always()
+        run: npm run stack:down
+
+  # e2e-mobile:
+  #   Reserved — see mobile/README.md. Not added until DayFlow's Flutter app (Phase 3) exists;
+  #   would boot an emulator, install the build, and run mobile/ against the same stack-up steps
+  #   used by `api` and `e2e-web` above.
