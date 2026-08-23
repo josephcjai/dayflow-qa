@@ -6,8 +6,13 @@
  */
 import { config } from 'dotenv';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-config({ path: path.resolve(__dirname, '..', '.env.test') });
+// import.meta.url, not __dirname — this file is loaded both by Vitest (which shims __dirname
+// even under "type": "module") and by Playwright's own config loader (which doesn't; confirmed
+// live — Playwright's loader treats this as real native ESM and __dirname throws there).
+const here = path.dirname(fileURLToPath(import.meta.url));
+config({ path: path.resolve(here, '..', '.env.test') });
 
 function envOr(key: string, fallback: string): string {
   return process.env[key] ?? fallback;

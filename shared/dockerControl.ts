@@ -5,9 +5,12 @@
  */
 import { execSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const composeFile = path.resolve(__dirname, '..', 'docker-compose.test.yml');
-const repoRoot = path.resolve(__dirname, '..');
+// import.meta.url, not __dirname — see the comment in shared/env.ts for why.
+const here = path.dirname(fileURLToPath(import.meta.url));
+const composeFile = path.resolve(here, '..', 'docker-compose.test.yml');
+const repoRoot = path.resolve(here, '..');
 
 export function restartQaContainers(...services: string[]): void {
   const target = services.length ? services.join(' ') : '';

@@ -22,7 +22,9 @@ test.describe('todo UI state survives a real reload', () => {
     await expect(deleteItem).toBeVisible();
 
     await keepItem.locator('input[type="checkbox"]').check();
-    await deleteItem.getByRole('button', { name: /delete|remove|🗑/i }).click();
+    // Confirmed against the live DOM: each todo's delete button has accessible name "✕", not
+    // anything text-based — the earlier /delete|remove|🗑/i guess never matched.
+    await deleteItem.getByRole('button', { name: '✕' }).click();
     // The app shows a confirm dialog before deleting (per index.html's deleteTodoConfirmModal).
     const confirmBtn = page.locator('#confirmDeleteTodoBtn');
     if (await confirmBtn.isVisible().catch(() => false)) {
