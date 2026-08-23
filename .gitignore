@@ -18,3 +18,7 @@ test-results/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Scratch material (e.g. the onboarding doc this repo was built from) - reference only, not
+# part of the repo's tracked content
+temp/
