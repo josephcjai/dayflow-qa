@@ -9,6 +9,7 @@
     "stack:up": "npm run checkout:dev-ref && docker compose -f docker-compose.test.yml --env-file .env.test up -d --build && node scripts/wait-for-health.mjs",
     "stack:down": "docker compose -f docker-compose.test.yml --env-file .env.test down -v",
     "stack:logs": "docker compose -f docker-compose.test.yml --env-file .env.test logs -f",
+    "stack:reset-api": "docker compose -f docker-compose.test.yml --env-file .env.test restart api-qa && node scripts/wait-for-health.mjs",
     "test:api": "vitest run",
     "test:e2e": "playwright test",
     "test": "npm run test:api && npm run test:e2e",

@@ -48,6 +48,13 @@ See [docs/ARCHITECTURE.md#local-hostname-setup](docs/ARCHITECTURE.md#local-hostn
 running `test:e2e` for the first time — one one-line hosts-file entry is required for the browser
 tests to exercise the app the same way production does.
 
+**Sharing a running environment with a manual tester?** `api/07-proxy.spec.ts` deliberately
+exhausts the auth rate limiter as part of checklist item #7, and a real, confirmed gap in DayFlow
+(missing `trust proxy` config — see docs/TECHNICAL_PLAN.md) means that lockout is shared by anyone
+else hitting the same environment through nginx, not just the test. Run `npm run stack:reset-api`
+after `test:api` before handing the environment to someone for manual use — it only restarts the
+API container, no data is lost.
+
 ## Ground rules (short version)
 
 1. This repo never pushes to, branches, or PRs against `DayFlow`. Access to it is read-only,

@@ -35,6 +35,14 @@ container lifetime, and file 7 deliberately exhausts it (see vitest.config.ts):
    pulling in the e2e layer's hosts-file dependency. Runs last on purpose — see file-level
    comments.
 
+   **Side effect to know about before sharing an environment:** this file deliberately exhausts
+   the auth rate limiter, and because of finding #2 below, that lockout is shared by *everyone*
+   hitting the environment through nginx — including a human testing manually at the same time,
+   who will see "Too many authentication attempts" with no way to tell it apart from a real
+   lockout. Run `npm run stack:reset-api` afterward (restarts only `api-qa`, no data lost) before
+   handing a shared environment to a manual tester, or don't run this file against an environment
+   someone else is actively using.
+
 **Three findings already confirmed live against `DAYFLOW_PINNED_REF`, not yet filed** (verified by
 actually running this suite against a real stack while building it — not just reading source):
 
