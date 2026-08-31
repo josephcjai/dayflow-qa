@@ -29,9 +29,12 @@ docs:test-inventory` (never hand-edited; CI fails if it's out of sync with the t
 ## Reports
 
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
-suggestions for whatever the suite turned up on a given run. Latest:
-[2026-08-23-qa-findings.md](reports/2026-08-23-qa-findings.md) (3 confirmed issues, 46/48 checks
-passing).
+suggestions for whatever the suite turned up on a given run.
+
+- [2026-08-31-qa-retest.md](reports/2026-08-31-qa-retest.md) — retest against the dev team's fix:
+  **all 3 findings confirmed resolved**, 48/48 checks passing.
+- [2026-08-23-qa-findings.md](reports/2026-08-23-qa-findings.md) — original findings (3 issues,
+  46/48 checks passing).
 
 ## Quick start (local)
 

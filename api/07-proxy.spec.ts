@@ -11,12 +11,13 @@ import { ENV } from '../shared/env.js';
 
 const proxyApi = `${ENV.proxyBaseUrl}/api`;
 
-async function attemptLogin(origin?: string) {
+async function attemptLogin(origin?: string, xForwardedFor?: string) {
   return fetch(`${proxyApi}/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(origin ? { Origin: origin } : {}),
+      ...(xForwardedFor ? { 'X-Forwarded-For': xForwardedFor } : {}),
     },
     body: JSON.stringify({ email: 'nobody@dayflow-qa.test', password: 'wrong-password' }),
   });
@@ -38,14 +39,15 @@ describe('rate limiting through the real reverse-proxy path', () => {
   );
 
   it(
-    'checklist #7b — a different simulated client in the same window should be unaffected ' +
-      '(KNOWN GAP: server.ts never calls app.set("trust proxy", ...), so req.ip is nginx\'s own ' +
-      'container IP for every request that comes through it — every client behind this proxy ' +
-      'shares one bucket. If this assertion is red, that gap is confirmed live, not flaky — see ' +
-      'docs/TECHNICAL_PLAN.md Phase 1 checklist item #7 before re-running.)',
+    "checklist #7b — a client can't dodge the limit by forging its own X-Forwarded-For " +
+      "(RESOLVED, was previously red — server.ts now sets app.set('trust proxy', 1). This test's " +
+      'original form tried to simulate "two different clients" purely from this one test-runner ' +
+      "machine with no distinguishing signal at all, which could never pass regardless of the fix " +
+      '— trust proxy=1 correctly trusts only what nginx itself directly observed, one hop back, ' +
+      "and correctly ignores a value the client injects further back in the chain, which is what " +
+      "that attempt actually was. This rewrite tests something trust proxy=1 can really prove: " +
+      "spoofing X-Forwarded-For must NOT be a way to evade the limiter.)",
     async () => {
-      // Exhaust the limit as "client 1" (no distinguishing signal is available client-side; that's
-      // the point — the app has no way to tell these apart either, per the gap above).
       let limited = false;
       for (let i = 0; i < 55 && !limited; i++) {
         const res = await attemptLogin();
@@ -53,10 +55,10 @@ describe('rate limiting through the real reverse-proxy path', () => {
       }
       expect(limited).toBe(true);
 
-      // A "second client" hitting the exact same proxy immediately after should NOT be limited
-      // by client 1's attempts if IP attribution actually worked end-to-end.
-      const second = await attemptLogin();
-      expect(second.status).not.toBe(429);
+      // A fresh-looking, client-supplied X-Forwarded-For must not reset or dodge the limit —
+      // trust proxy=1 should still key on what nginx itself saw, not this claimed value.
+      const spoofed = await attemptLogin(undefined, '203.0.113.250');
+      expect(spoofed.status).toBe(429);
     },
     30_000
   );

@@ -4,49 +4,48 @@
  * passed against an in-memory fallback but silently failed against real Postgres due to a schema
  * mismatch — only a test against a freshly restarted real DB catches it.
  *
- * Restarts this repo's own postgres-qa and api-qa containers (never anything dev-owned) via
- * `docker compose restart`, sequenced deliberately — see the two things confirmed live while
- * building this suite, below. Both are documented here rather than only in a commit message
- * because they change what "just restart both containers" safely means for anyone touching this
- * file later.
+ * Restarts ONLY this repo's own postgres-qa container (never anything dev-owned, never api-qa) via
+ * `docker compose restart`. Two things worth knowing, both confirmed live:
  *
  * 1. Postgres uses a real named volume in docker-compose.test.yml, not tmpfs — tmpfs was tried
  *    first and does NOT reliably survive `docker compose restart` on Docker Desktop's WSL2
  *    backend (the data directory came back empty and Postgres silently re-ran initdb). See the
  *    comment on that volume in docker-compose.test.yml.
- * 2. api-qa is restarted AFTER postgres-qa is confirmed healthy again, not concurrently with it,
- *    and not left to reconnect on its own — because it doesn't: DayFlow's db.ts creates a `pg
- *    .Pool` with no `.on('error', ...)` listener, so when Postgres becomes briefly unreachable
- *    the pool's unhandled 'error' event crashes the whole Node process (confirmed live: api-qa
- *    exited with code 1 after a plain postgres-qa restart, with nothing else touching it). That
- *    is a real DayFlow robustness gap worth filing on its own — a transient DB hiccup should not
- *    take the whole API down — independent of whatever this test is actually checking. Restarting
- *    api-qa explicitly here is a working-around-a-known-bug step, not a requirement of the
- *    architecture; remove it if that gap ever gets fixed upstream and this still passes.
+ * 2. This test used to also explicitly restart api-qa after postgres-qa, to work around a real bug
+ *    (db.ts's `pg.Pool` had no `.on('error', ...)` listener, so a Postgres restart crashed the
+ *    whole API process — filed as Finding 03, 2026-08-23 report). That's now fixed upstream
+ *    (confirmed live: api-qa stays up and reconnects on its own through a postgres-qa-only
+ *    restart) — the api-qa restart step was removed. If it ever regresses, THIS test is what
+ *    would catch it: the poll below would time out waiting for the API to come back, since
+ *    nothing here restarts it for you anymore.
  *
- * Slower and more disruptive than the rest of the suite (it briefly stops the database and API),
- * so it's isolated in its own file — safe to skip locally with
+ * Slower and more disruptive than the rest of the suite (it briefly stops the database), so it's
+ * isolated in its own file — safe to skip locally with
  * `vitest run --exclude "**\/06-restart-persistence.spec.ts"` when iterating on something else.
  */
 import { describe, it, expect } from 'vitest';
-import { ENV } from '../shared/env.js';
 import { registerTestUser } from '../shared/testUser.js';
 import { restartQaContainers, waitForContainerHealthy } from '../shared/dockerControl.js';
 
 const weekStart = '2026-09-07';
 
-async function waitForApiHealthy(timeoutMs = 60_000) {
+async function pollUntilNotesMatch(
+  getNotes: () => Promise<string | undefined>,
+  expected: string,
+  timeoutMs = 30_000
+): Promise<string | undefined> {
   const start = Date.now();
+  let last: string | undefined;
   while (Date.now() - start < timeoutMs) {
     try {
-      const res = await fetch(`${ENV.apiBaseUrl}/health`, { signal: AbortSignal.timeout(3000) });
-      if (res.ok) return;
+      last = await getNotes();
+      if (last === expected) return last;
     } catch {
-      // not up yet
+      // pool still reconnecting — keep polling
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  throw new Error(`API did not become healthy within ${timeoutMs}ms`);
+  return last;
 }
 
 describe('persistence survives a real database restart', () => {
@@ -61,13 +60,15 @@ describe('persistence survives a real database restart', () => {
 
     restartQaContainers('postgres-qa');
     await waitForContainerHealthy('dayflow-qa-postgres');
-    // See file header #2 — api-qa needs an explicit restart here, not just time to reconnect.
-    restartQaContainers('api-qa');
-    await waitForApiHealthy();
+
+    const notesAfter = await pollUntilNotesMatch(async () => {
+      const res = await user.client.get(`/todos/week/${weekStart}`);
+      return res.body.notes;
+    }, noteText);
+
+    expect(notesAfter).toBe(noteText);
 
     const after = await user.client.get(`/todos/week/${weekStart}`);
-    expect(after.status).toBe(200);
-    expect(after.body.notes).toBe(noteText);
     expect(after.body.todos.some((t: any) => t.id === todo.body.todo.id)).toBe(true);
-  }, 90_000);
+  }, 60_000);
 });

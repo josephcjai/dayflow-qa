@@ -8,31 +8,42 @@ import { registerAndLoginViaUI } from './fixtures.js';
  * modal (#plannedLockMsg / disabling #plannedTaskInput) — it cannot be asserted from api/.
  */
 
-function yesterday(): string {
+// A full week+ away in each direction, not just ±1 day: confirmed live that "tomorrow" is fragile
+// whenever today happens to fall on a Monday (the week's own start) — "tomorrow" then lands in
+// the SAME week as today, whose Monday column is today itself, already partly in the past by the
+// time the test runs. ±8 days always lands in an unambiguous, entirely past/future week regardless
+// of what day of the week "today" is.
+function daysFromNow(offset: number): Date {
   const d = new Date();
-  d.setDate(d.getDate() - 1);
+  d.setDate(d.getDate() + offset);
+  return d;
+}
+
+function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function tomorrow(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+function dayName(d: Date): string {
+  // Matches the full weekday name the app renders as the modal's day badge (confirmed against a
+  // live screenshot — "Monday", "Tuesday", etc.) and, per grid.js, sets as td[data-day-name].
+  return d.toLocaleDateString('en-US', { weekday: 'long' });
 }
 
-async function openSlotModal(page: import('@playwright/test').Page, dateStr: string, timeLabel: string) {
-  await page.fill('#weekDatePicker', dateStr);
-  // td.slot-cell carries data-time-label (confirmed against src/js/grid.js); picking the first
-  // match for that time label is a reasonable first cut but doesn't pin down *which day's* column
-  // that is — worth tightening once this runs against the live grid and the day-column dataset
-  // shape (data-day-name's actual values) is confirmed.
-  await page.locator(`td.slot-cell[data-time-label="${timeLabel}"]`).first().click();
+async function openSlotModal(page: import('@playwright/test').Page, targetDate: Date, timeLabel: string) {
+  await page.fill('#weekDatePicker', isoDate(targetDate));
+  // Confirmed live: picking td.slot-cell by time-label alone (no day filter) always grabbed
+  // Monday's column regardless of the target date, since Monday is first in DOM order — that
+  // silently passed both "past" and "future" cases before real dates ever put a Monday in the
+  // wrong bucket. Filtering by data-day-name too is what actually pins down the intended day.
+  await page
+    .locator(`td.slot-cell[data-time-label="${timeLabel}"][data-day-name="${dayName(targetDate)}"]`)
+    .click();
 }
 
 test.describe('Planned Task time-lock', () => {
   test('a slot from a past day: Planned Task is locked, Actual Task remains editable', async ({ page }) => {
     await registerAndLoginViaUI(page);
-    await openSlotModal(page, yesterday(), '08:00 AM');
+    await openSlotModal(page, daysFromNow(-8), '08:00 AM');
 
     await expect(page.locator('#plannedLockMsg')).toBeVisible();
     await expect(page.locator('#plannedTaskInput')).toBeDisabled();
@@ -42,7 +53,7 @@ test.describe('Planned Task time-lock', () => {
 
   test('a slot from a future day: Planned Task is fully editable, no lock message', async ({ page }) => {
     await registerAndLoginViaUI(page);
-    await openSlotModal(page, tomorrow(), '08:00 AM');
+    await openSlotModal(page, daysFromNow(8), '08:00 AM');
 
     await expect(page.locator('#plannedLockMsg')).toBeHidden();
     await expect(page.locator('#plannedTaskInput')).toBeEnabled();

@@ -66,7 +66,7 @@ CI re-runs this generator and fails if the committed file doesn't match — see 
 
 **rate limiting through the real reverse-proxy path**
 - checklist #7 — a client tripping the limit gets 429 (confirmed MAX_ATTEMPTS=50/15min for non-localhost IPs, from rateLimiter.ts)
-- checklist #7b — a different simulated client in the same window should be unaffected (KNOWN GAP: server.ts never calls app.set("trust proxy", ...), so req.ip is nginx's own container IP for every request that comes through it — every client behind this proxy shares one bucket. If this assertion is red, that gap is confirmed live, not flaky — see docs/TECHNICAL_PLAN.md Phase 1 checklist item #7 before re-running.)
+- checklist #7b — a client can't dodge the limit by forging its own X-Forwarded-For (RESOLVED, was previously red — server.ts now sets app.set('trust proxy', 1). This test's original form tried to simulate "two different clients" purely from this one test-runner machine with no distinguishing signal at all, which could never pass regardless of the fix — trust proxy=1 correctly trusts only what nginx itself directly observed, one hop back, and correctly ignores a value the client injects further back in the chain, which is what that attempt actually was. This rewrite tests something trust proxy=1 can really prove: spoofing X-Forwarded-For must NOT be a way to evade the limiter.)
 
 **CORS**
 - checklist #8 — a disallowed Origin does not get reflected in Access-Control-Allow-Origin

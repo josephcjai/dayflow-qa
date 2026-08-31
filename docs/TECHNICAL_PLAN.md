@@ -36,33 +36,36 @@ container lifetime, and file 7 deliberately exhausts it (see vitest.config.ts):
    comments.
 
    **Side effect to know about before sharing an environment:** this file deliberately exhausts
-   the auth rate limiter, and because of finding #2 below, that lockout is shared by *everyone*
-   hitting the environment through nginx — including a human testing manually at the same time,
-   who will see "Too many authentication attempts" with no way to tell it apart from a real
-   lockout. Run `npm run stack:reset-api` afterward (restarts only `api-qa`, no data lost) before
-   handing a shared environment to a manual tester, or don't run this file against an environment
-   someone else is actively using.
+   the auth rate limiter. Before the 2026-08-31 fix (see below) that lockout was shared by
+   *everyone* hitting the environment through nginx, not just the test — as of `trust proxy` being
+   set, a spoofed/different client no longer shares another client's bucket in the way that used to
+   demonstrate, but the exhaustion itself is still real and still shared by anything without a
+   distinguishing IP, so `npm run stack:reset-api` (restarts only `api-qa`, no data lost) is still
+   good practice before handing a shared environment to a manual tester.
 
-**Three findings already confirmed live against `DAYFLOW_PINNED_REF`, not yet filed** (verified by
-actually running this suite against a real stack while building it — not just reading source):
+**Three findings confirmed live against `DAYFLOW_PINNED_REF` on 2026-08-23 — all three confirmed
+FIXED on retest against `v2.3.0` (commit `75e65e7`) on 2026-08-31.** See
+[reports/2026-08-31-qa-retest.md](../reports/2026-08-31-qa-retest.md) for the full retest account,
+including two e2e test bugs (not app bugs) the retest surfaced and fixed along the way.
 
-1. `02-isolation.spec.ts`'s delete-by-known-ID case — `DELETE /api/todos/:id` for another user's
-   todo returns `200` regardless of whether any row matched, rather than a rejection. Data
-   isolation itself holds (confirmed: the row is untouched); the response semantics don't. **Red
-   today**, reproduced live.
-2. `07-proxy.spec.ts`'s second-client case — confirmed live that a second client sharing the same
-   nginx proxy inherits the first client's exhausted rate-limit bucket, because `server.ts` never
-   calls `app.set('trust proxy', ...)`. **Red today**, reproduced live.
-3. **Not encoded as a failing assertion, but confirmed live and worth its own issue:** a brief
-   Postgres outage crashes the whole API process (exit code 1), not just the DB-backed routes —
-   `server/src/db/db.ts` constructs a `pg.Pool` with no `.on('error', ...)` listener, so a dropped
-   idle-client connection is an unhandled `Pool` `'error'` event, which Node treats as fatal. Seen
-   directly while building `06-restart-persistence.spec.ts` (see that file's header for the full
-   account); that spec now explicitly restarts `api-qa` after `postgres-qa` recovers to work around
-   it, rather than relying on the pool to reconnect on its own, since it doesn't.
+1. ~~`02-isolation.spec.ts`'s delete-by-known-ID case~~ — **fixed.** `DELETE`/`PATCH` on
+   `/api/todos/:id` and `DELETE /api/habits/:id` now check `rowCount` and return `404` when nothing
+   matched. Verified live: full `02-isolation.spec.ts` run, 14/14 pass.
+2. ~~`07-proxy.spec.ts`'s second-client case~~ — **fixed.** `server.ts` now calls `app.set('trust
+   proxy', 1)`. The original test could never have validated this properly (see the retest report —
+   it had no way to simulate two genuinely different client IPs from one test machine); rewritten
+   to assert the thing that setting actually guarantees: a client can't dodge the limit by forging
+   its own `X-Forwarded-For`. Verified live, including a from-scratch trust-proxy-semantics
+   walkthrough to confirm the new test is actually correct, not just passing.
+3. ~~Unhandled `pg.Pool` error crashing the process~~ — **fixed.** `db.ts` now has a `pool.on('error',
+   ...)` listener. Verified live: restarted `postgres-qa` alone (no longer also restarting `api-qa`
+   as the old workaround did) and confirmed `api-qa` stays up, reconnects on its own, and serves a
+   real DB-backed request afterward.
 
-File all three against `DayFlow` rather than "fixing" the tests (or the workaround) to match
-current behavior.
+`06-restart-persistence.spec.ts`'s old api-qa-restart workaround for finding #3 has been removed
+now that it's confirmed fixed — the test now only restarts `postgres-qa`, which also makes it a
+live regression guard: if the crash-on-disconnect bug ever comes back, this is the test that would
+catch it.
 
 **Done when:** all 11 items in the onboarding's §7 regression checklist have a corresponding
 automated assertion, and the suite's outcome (pass, or a red test with a filed issue behind it) is
