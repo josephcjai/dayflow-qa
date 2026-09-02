@@ -126,9 +126,10 @@ so it slots in without touching the layers that already work:
   strategy (an Android emulator needs `10.0.2.2` instead of `127.0.0.1` for the hosts mapping;
   iOS simulators can use the host's `127.0.0.1` directly — noted in `mobile/README.md` for when it's
   built).
-- **CI shape:** `.github/workflows/ci.yml` already runs `api` and `e2e-web` as independent jobs
-  against one stack-up. A future `e2e-mobile` job is additive — same stack-up step, new job that
-  boots an emulator and runs `mobile/`.
+- **CI shape:** no GitHub Actions workflow right now — removed 2026-09-02, see
+  `docs/TECHNICAL_PLAN.md`'s Phase 0 note. `npm run test:api` / `test:e2e` run locally as
+  independent commands against one stack-up; a future `test:mobile` slots in the same way, and all
+  three would become independent CI jobs if/when Actions is usable again.
 
 ## 6. Environments this repo can target
 

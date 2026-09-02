@@ -6,10 +6,18 @@ Companion to [ARCHITECTURE.md](ARCHITECTURE.md) (the *what/where*) — this is t
 ## Phase 0 — Repo & environment scaffold (this commit)
 - Repo structure, ground rules doc, pinned-ref mechanism, `docker-compose.test.yml` with isolated
   ports/DB/hostname (see ARCHITECTURE §4).
-- CI skeleton that checks out the pinned ref, brings the stack up, waits for `/api/health`, and
-  tears down — even with zero tests wired in yet.
 - **Done when:** `npm run stack:up && curl http://localhost:5100/api/health` succeeds from a clean
   clone with nothing manually configured beyond Docker + the one hosts-file entry.
+
+**CI automation removed (2026-09-02) — run these by hand instead.** A GitHub Actions workflow
+existed here (checkout pinned ref → stack up → `test:api`/`test:e2e` → teardown, plus
+`docs-check`/`contract-check` jobs) but every run failed before a runner was ever assigned — 13/13
+runs, on every trigger, since the very first push, confirmed to be an Actions
+availability/billing issue on the account, not a real content or test failure (verified by diffing
+the actual committed bytes directly — they matched). Removed rather than leave a red X that never
+reflects anything real. Run `npm run test:api`, `npm run test:e2e`, `npm run contract:check`, and
+`npm run docs:test-inventory` locally instead; re-add a workflow file if/when Actions is usable on
+this account again — nothing else here depends on it existing.
 
 ## Phase 1 — API/integration suite (priority — build first)
 Per the onboarding doc, nearly every real bug found in this app so far has been at this layer:
@@ -85,8 +93,9 @@ Only what genuinely needs a rendered DOM, per the onboarding's scoping call:
 Explicitly **not** duplicating Layer 1 coverage here — if a case can be asserted over HTTP, it
 belongs in `api/`, not `e2e/`.
 
-**Done when:** the four specs above are green against `dayflow-qa.local:8280` in CI, using the
-hostname strategy in ARCHITECTURE §4 (not `localhost`, so the real proxy path is exercised).
+**Done when:** the four specs above are green against `dayflow-qa.local:8280` (run locally — see
+the CI note above), using the hostname strategy in ARCHITECTURE §4 (not `localhost`, so the real
+proxy path is exercised).
 
 ## Phase 3 — Mobile UI (future, gated on dev's Flutter app shipping)
 Not started — DayFlow's Phase 3 mobile app doesn't exist yet. Reserved so it's additive later:
@@ -95,7 +104,8 @@ Not started — DayFlow's Phase 3 mobile app doesn't exist yet. Reserved so it's
    out to be needed.
 2. Reuse `shared/` fixtures as-is for setting up test users/data through the API before driving the
    mobile UI — no new backend test infrastructure required.
-3. Add an `e2e-mobile` CI job parallel to the existing `e2e-web` job.
+3. Add a `test:mobile` npm script alongside `test:api`/`test:e2e`; fold it into a CI workflow if/when
+   GitHub Actions is usable on this account again (see the Phase 0 note above).
 
 Do not build this early speculatively — the onboarding doc is explicit that Phase 3 isn't built and
 "no mobile app" isn't a bug to chase. This phase exists in the plan so that when it *is* built, QA
@@ -112,7 +122,7 @@ doc's own bug history doesn't currently justify them.
 
 ## Contract drift
 [contract/API_CONTRACT.md](../contract/API_CONTRACT.md) holds QA's pinned copy of the dev team's
-published contract. `npm run contract:check` (CI runs this on every pinned-ref bump) diffs it
-against the copy inside the checked-out dev ref and fails loudly on drift, per onboarding §8 — the
-goal is QA discovering a breaking API change from an explicit CI failure, not from a mysteriously
-red assertion three files away.
+published contract. `npm run contract:check` (run by hand on every pinned-ref bump — no CI right
+now, see the Phase 0 note above) diffs it against the copy inside the checked-out dev ref and fails
+loudly on drift, per onboarding §8 — the goal is QA discovering a breaking API change from an
+explicit check failure, not from a mysteriously red assertion three files away.

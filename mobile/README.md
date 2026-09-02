@@ -37,8 +37,9 @@ cross-device-matrix coverage becomes an actual requirement, not preemptively.
   - iOS simulator → can reach the host's `127.0.0.1`/hosts entries directly.
   - Physical devices / CI device farms → need the QA stack reachable over the local network or a
     tunnel; not designed yet, since there's no app to test against.
-- **CI shape:** `.github/workflows/ci.yml` already separates `api` and `e2e-web` into independent
-  jobs sharing one stack-up. A future `e2e-mobile` job is additive: boot an emulator, install the
+- **CI shape:** no GitHub Actions workflow right now (removed — see
+  `docs/TECHNICAL_PLAN.md`'s Phase 0 note); `test:api`/`test:e2e` run as independent local commands
+  sharing one stack-up. A future `test:mobile` slots in the same way: boot an emulator, install the
   build, run this folder's flows against the same running stack.
 
 ## Suggested folder shape once this is built

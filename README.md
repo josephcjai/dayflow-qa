@@ -24,7 +24,9 @@ hostname/routing detail that matters once you get to browser-level tests.
 
 **What's actually covered right now:** [docs/TEST_INVENTORY.md](docs/TEST_INVENTORY.md) — every
 test title, grouped by file, regenerated straight from the test source with `npm run
-docs:test-inventory` (never hand-edited; CI fails if it's out of sync with the tests it describes).
+docs:test-inventory` (never hand-edited — no CI to enforce that automatically right now, see
+[docs/TECHNICAL_PLAN.md](docs/TECHNICAL_PLAN.md)'s Phase 0 note, so re-run it by hand after adding
+or renaming a test).
 
 ## Reports
 
@@ -63,11 +65,14 @@ running `test:e2e` for the first time — one one-line hosts-file entry is requi
 tests to exercise the app the same way production does.
 
 **Sharing a running environment with a manual tester?** `api/07-proxy.spec.ts` deliberately
-exhausts the auth rate limiter as part of checklist item #7, and a real, confirmed gap in DayFlow
-(missing `trust proxy` config — see docs/TECHNICAL_PLAN.md) means that lockout is shared by anyone
-else hitting the same environment through nginx, not just the test. Run `npm run stack:reset-api`
-after `test:api` before handing the environment to someone for manual use — it only restarts the
-API container, no data is lost.
+exhausts the auth rate limiter as part of checklist item #7 — that's the point of the test, not a
+bug, but it means anyone else hitting the same environment through nginx right after will also see
+"Too many authentication attempts" until the window resets. Run `npm run stack:reset-api` after
+`test:api` before handing the environment to someone for manual use — it only restarts the API
+container, no data is lost. (This used to also mean one client's lockout leaked to a *different*
+client — a real DayFlow gap, fixed 2026-08-31, see
+[reports/2026-08-31-qa-retest.md](reports/2026-08-31-qa-retest.md). What's left is just the
+limiter doing its job against a shared environment, not a bug.)
 
 ## Ground rules (short version)
 
