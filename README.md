@@ -33,8 +33,11 @@ or renaming a test).
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
 suggestions for whatever the suite turned up on a given run.
 
+- [2026-09-07-qa-new-features.md](reports/2026-09-07-qa-new-features.md) — coverage for 3 new
+  feature commits (due dates, note sheets, date-range validation) plus **1 new finding**, 89/90
+  checks passing.
 - [2026-08-31-qa-retest.md](reports/2026-08-31-qa-retest.md) — retest against the dev team's fix:
-  **all 3 findings confirmed resolved**, 48/48 checks passing.
+  **all 3 prior findings confirmed resolved**, 48/48 checks passing.
 - [2026-08-23-qa-findings.md](reports/2026-08-23-qa-findings.md) — original findings (3 issues,
   46/48 checks passing).
 
@@ -64,7 +67,7 @@ See [docs/ARCHITECTURE.md#local-hostname-setup](docs/ARCHITECTURE.md#local-hostn
 running `test:e2e` for the first time — one one-line hosts-file entry is required for the browser
 tests to exercise the app the same way production does.
 
-**Sharing a running environment with a manual tester?** `api/07-proxy.spec.ts` deliberately
+**Sharing a running environment with a manual tester?** `api/10-proxy.spec.ts` deliberately
 exhausts the auth rate limiter as part of checklist item #7 — that's the point of the test, not a
 bug, but it means anyone else hitting the same environment through nginx right after will also see
 "Too many authentication attempts" until the window resets. Run `npm run stack:reset-api` after

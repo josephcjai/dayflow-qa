@@ -30,7 +30,7 @@ function specFiles(dir) {
 
 function parseFile(filePath) {
   // Whole-file, not line-by-line: titles sometimes start on the line after `it(`/`test(` (long
-  // titles built with string concatenation, e.g. api/07-proxy.spec.ts) — \s already matches
+  // titles built with string concatenation, e.g. api/10-proxy.spec.ts) — \s already matches
   // newlines, but only if the call and its title are matched as one span rather than per-line.
   const text = readFileSync(filePath, 'utf8');
   const groups = []; // { describe, tests: [{title, parametrized}] }

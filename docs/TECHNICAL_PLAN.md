@@ -9,6 +9,14 @@ Companion to [ARCHITECTURE.md](ARCHITECTURE.md) (the *what/where*) — this is t
 - **Done when:** `npm run stack:up && curl http://localhost:5100/api/health` succeeds from a clean
   clone with nothing manually configured beyond Docker + the one hosts-file entry.
 
+**Pinned to a raw commit SHA as of 2026-09-07, not `v2.3.0`.** Three feature commits landed on
+`main` after `v2.3.0` was tagged (`75e65e7`) — multi-sheet Markdown notes, todo due dates, and
+server-side date-range validation (1800–2200) — with no new tag cut for them yet.
+`DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`6fb7686`); `checkout-dev-ref.mjs`
+fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since `git clone --branch`
+doesn't accept one. Same suggestion as before: a tag for this point would let the pin be a name
+again instead of a SHA.
+
 **CI automation removed (2026-09-02) — run these by hand instead.** A GitHub Actions workflow
 existed here (checkout pinned ref → stack up → `test:api`/`test:e2e` → teardown, plus
 `docs-check`/`contract-check` jobs) but every run failed before a runner was ever assigned — 13/13
@@ -23,7 +31,7 @@ this account again — nothing else here depends on it existing.
 Per the onboarding doc, nearly every real bug found in this app so far has been at this layer:
 auth correctness, cross-user isolation, and persistence across a real restart. Files are numbered
 and **must run in that order** — the API's auth rate limiter is one shared in-memory bucket per
-container lifetime, and file 7 deliberately exhausts it (see vitest.config.ts):
+container lifetime, and file 10 deliberately exhausts it (see vitest.config.ts):
 1. `api/01-auth.spec.ts` — checklist items 1, 2, 3.
 2. `api/02-isolation.spec.ts` — checklist item 4. Highest-value file in the repo; every new
    endpoint the dev team ships gets an isolation case added here before anything else.
@@ -36,11 +44,22 @@ container lifetime, and file 7 deliberately exhausts it (see vitest.config.ts):
 5. `api/06-restart-persistence.spec.ts` — checklist item 6. Deliberately restarts the QA
    Postgres container mid-suite (real restart, not a re-fetch) — this is the class of bug that
    only shows up against a freshly restarted real database, per the onboarding history.
-6. `api/07-proxy.spec.ts` — checklist items 7 (rate limiting through the real nginx path) and 8
+6. `api/07-date-bounds.spec.ts` — added 2026-09-07 for the new `isValidDateRange` checks
+   (`server/src/utils/dateValidation.ts`) added across `schedule`/`habits`/`todos` GET/POST/DELETE
+   routes: out-of-range (before 1800 / after 2200), malformed, and boundary-exact dates.
+7. `api/08-todo-due-dates.spec.ts` — added 2026-09-07 for the new `dueDate` field on todos: create,
+   validate, patch, clear (`null`), cross-user isolation — plus a confirmed-live regression this
+   file exists specifically to catch (see the findings note below).
+8. `api/09-note-sheets.spec.ts` — added 2026-09-07 for the new multiple-categorized-note-sheets
+   feature (`schedule_weeks.note_sheets` JSONB): default-sheet synthesis for a brand-new week,
+   custom sheet save/fetch round-trip, the journal-sheet-content syncs to the legacy `notes` field,
+   cross-user isolation.
+9. `api/10-proxy.spec.ts` — checklist items 7 (rate limiting through the real nginx path) and 8
    (CORS), run against nginx-qa on `localhost:8280` (not `dayflow-qa.local` — that hostname only
    matters to the frontend's own hostname-sniffing JS, which this file never loads; see
    `shared/env.ts`'s `proxyBaseUrl`), so proxy header handling is actually exercised without
-   pulling in the e2e layer's hosts-file dependency. Runs last on purpose — see file-level
+   pulling in the e2e layer's hosts-file dependency. Numbered last (was `07-proxy.spec.ts` before
+   the three files above needed to slot in ahead of it) — runs last on purpose, see file-level
    comments.
 
    **Side effect to know about before sharing an environment:** this file deliberately exhausts
@@ -59,7 +78,7 @@ including two e2e test bugs (not app bugs) the retest surfaced and fixed along t
 1. ~~`02-isolation.spec.ts`'s delete-by-known-ID case~~ — **fixed.** `DELETE`/`PATCH` on
    `/api/todos/:id` and `DELETE /api/habits/:id` now check `rowCount` and return `404` when nothing
    matched. Verified live: full `02-isolation.spec.ts` run, 14/14 pass.
-2. ~~`07-proxy.spec.ts`'s second-client case~~ — **fixed.** `server.ts` now calls `app.set('trust
+2. ~~`10-proxy.spec.ts`'s second-client case~~ (numbered `07-proxy.spec.ts` at the time) — **fixed.** `server.ts` now calls `app.set('trust
    proxy', 1)`. The original test could never have validated this properly (see the retest report —
    it had no way to simulate two genuinely different client IPs from one test machine); rewritten
    to assert the thing that setting actually guarantees: a client can't dodge the limit by forging
@@ -75,6 +94,14 @@ now that it's confirmed fixed — the test now only restarts `postgres-qa`, whic
 live regression guard: if the crash-on-disconnect bug ever comes back, this is the test that would
 catch it.
 
+**Finding 04, confirmed live 2026-09-07, not yet filed:** `08-todo-due-dates.spec.ts`'s empty-PATCH
+case — `PATCH /api/todos/:id` with an empty body (`{}`, or any body naming neither `completed` nor
+`dueDate`) silently sets `is_completed = false` regardless of the item's current state, because the
+handler's final `else` branch runs `SET is_completed = !!completed` unconditionally when neither
+field was provided. **Red today**, reproduced live twice. See
+[reports/2026-09-07-qa-new-features.md](../reports/2026-09-07-qa-new-features.md) for repro steps
+and the suggested fix.
+
 **Done when:** all 11 items in the onboarding's §7 regression checklist have a corresponding
 automated assertion, and the suite's outcome (pass, or a red test with a filed issue behind it) is
 understood — not necessarily 100% green, per the findings above.
@@ -89,11 +116,23 @@ Only what genuinely needs a rendered DOM, per the onboarding's scoping call:
 - `e2e/time-lock.spec.ts` — checklist item 9. This is the one genuinely DOM-only checklist item:
   the Planned Task field's lock state lives entirely in the frontend, never enforced by the API
   (see Phase 1 note above), so it can only be verified by driving the actual modal.
+- `e2e/note-sheets.spec.ts` — added 2026-09-07: the multiple-categorized-note-sheets UI (tab bar,
+  create/switch/delete a sheet, per-sheet content persisting across reload). Default-sheet
+  synthesis and the save/fetch contract itself are covered in `api/09-note-sheets.spec.ts`; this
+  file is only the tab-switching and modal interactions an API test can't reach.
+- `e2e/todo-due-date.spec.ts` — added 2026-09-07: the due-date quick-set buttons (Today/Tomorrow/
+  Clear) and the resulting badge classes (`.todo-due-today` etc.) in the todo list — UI-rendering
+  behavior that `api/08-todo-due-dates.spec.ts`'s contract coverage doesn't reach.
+
+Not yet covered, lower priority than the above (noted so it's a decision, not an oversight):
+Markdown edit/split/preview modes and the formatting toolbar (`src/js/markdown.js`, "Phase 4"),
+and the `dateFormat` display setting — both are purely client-side rendering/localStorage
+preferences with no API surface, per source review on 2026-09-07.
 
 Explicitly **not** duplicating Layer 1 coverage here — if a case can be asserted over HTTP, it
 belongs in `api/`, not `e2e/`.
 
-**Done when:** the four specs above are green against `dayflow-qa.local:8280` (run locally — see
+**Done when:** the specs above are green against `dayflow-qa.local:8280` (run locally — see
 the CI note above), using the hostname strategy in ARCHITECTURE §4 (not `localhost`, so the real
 proxy path is exercised).
 

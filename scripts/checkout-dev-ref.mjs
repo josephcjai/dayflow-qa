@@ -22,27 +22,43 @@ const checkoutDir = path.resolve(
   process.env.DEV_CHECKOUT_DIR || '.dev-checkout/DayFlow'
 );
 
-if (existsSync(checkoutDir)) rmSync(checkoutDir, { recursive: true, force: true });
-mkdirSync(checkoutDir, { recursive: true });
+const isFullSha = /^[0-9a-f]{40}$/i.test(ref);
 
-console.log(`Checking out DayFlow @ "${ref}" (read-only) into ${checkoutDir} ...`);
-try {
-  execSync(`git clone --branch ${ref} --depth 1 ${REPO_URL} "${checkoutDir}"`, {
-    stdio: 'inherit',
-  });
-} catch {
-  console.warn(
-    `\n⚠️  No git tag/branch named "${ref}" exists on DayFlow (yet). Falling back to main@HEAD` +
-      ` so the stack can still come up.`
-  );
-  console.warn(
-    `   This means the suite is NOT actually pinned to "${ref}" right now — ask the dev team to` +
-      ` tag releases (e.g. "git tag ${ref} && git push --tags") so QA's pin is exact, then bump` +
-      ` DAYFLOW_PINNED_REF here to match.\n`
-  );
-  rmSync(checkoutDir, { recursive: true, force: true });
+function freshDir() {
+  if (existsSync(checkoutDir)) rmSync(checkoutDir, { recursive: true, force: true });
   mkdirSync(checkoutDir, { recursive: true });
-  execSync(`git clone --depth 1 ${REPO_URL} "${checkoutDir}"`, { stdio: 'inherit' });
+}
+
+freshDir();
+console.log(`Checking out DayFlow @ "${ref}" (read-only) into ${checkoutDir} ...`);
+
+if (isFullSha) {
+  // A tag/branch name works with `clone --branch`; a raw commit SHA doesn't (git rejects it as
+  // an unknown ref for that flag even though GitHub will happily serve it) — fetch it directly
+  // instead. Used when DAYFLOW_PINNED_REF is pinned to an exact commit because no tag exists yet
+  // for what's being tested (see docs/TECHNICAL_PLAN.md's pinning notes).
+  execSync(`git init -q "${checkoutDir}"`, { stdio: 'inherit' });
+  execSync(`git -C "${checkoutDir}" remote add origin ${REPO_URL}`, { stdio: 'inherit' });
+  execSync(`git -C "${checkoutDir}" fetch --depth 1 origin ${ref}`, { stdio: 'inherit' });
+  execSync(`git -C "${checkoutDir}" checkout FETCH_HEAD`, { stdio: 'inherit' });
+} else {
+  try {
+    execSync(`git clone --branch ${ref} --depth 1 ${REPO_URL} "${checkoutDir}"`, {
+      stdio: 'inherit',
+    });
+  } catch {
+    console.warn(
+      `\n⚠️  No git tag/branch named "${ref}" exists on DayFlow (yet). Falling back to main@HEAD` +
+        ` so the stack can still come up.`
+    );
+    console.warn(
+      `   This means the suite is NOT actually pinned to "${ref}" right now — ask the dev team to` +
+        ` tag releases (e.g. "git tag ${ref} && git push --tags") so QA's pin is exact, then bump` +
+        ` DAYFLOW_PINNED_REF here to match.\n`
+    );
+    freshDir();
+    execSync(`git clone --depth 1 ${REPO_URL} "${checkoutDir}"`, { stdio: 'inherit' });
+  }
 }
 
 cpSync(

@@ -31,9 +31,14 @@ const pinnedRaw = readFileSync(pinnedCopyPath, 'utf8');
 const liveRaw = readFileSync(liveCopyPath, 'utf8');
 
 // Strip QA's leading HTML-comment header before comparing — everything after it should be a
-// verbatim copy of the dev team's file.
-const pinnedBody = pinnedRaw.replace(/^<!--[\s\S]*?-->\s*/, '').trim();
-const liveBody = liveRaw.trim();
+// verbatim copy of the dev team's file. Line endings are normalized (\r\n -> \n) before
+// comparing: confirmed live that `git clone` on Windows applies autocrlf and hands back CRLF for
+// the freshly checked-out live copy while the committed pinned copy stays LF, which is a pure
+// checkout artifact, not real drift — comparing raw GitHub bytes for both sides confirmed
+// identical content when this first came up (see reports/2026-08-23-qa-findings.md's method).
+const normalize = (s) => s.replace(/\r\n/g, '\n').trim();
+const pinnedBody = normalize(pinnedRaw.replace(/^<!--[\s\S]*?-->\s*/, ''));
+const liveBody = normalize(liveRaw);
 
 if (pinnedBody === liveBody) {
   console.log('✅ contract/API_CONTRACT.md matches DayFlow/docs/API_DOCUMENTATION.md exactly.');

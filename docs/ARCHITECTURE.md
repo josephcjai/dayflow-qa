@@ -59,15 +59,18 @@ The API and nginx images are **built from** a pinned, read-only checkout of the 
 
 ## 3. Where the app under test comes from
 
-`DAYFLOW_PINNED_REF` at the repo root holds the exact tag/commit currently under test (starts at
-`v2.3.0`, matching the onboarding doc). `npm run checkout:dev-ref` (wraps
-[scripts/checkout-dev-ref.mjs](../scripts/checkout-dev-ref.mjs)) does a shallow, read-only
-`git clone --branch <ref> --depth 1` of `https://github.com/josephcjai/DayFlow.git` into
-`.dev-checkout/` (gitignored, never committed, never pushed anywhere). `docker-compose.test.yml`
-then uses that checkout purely as a **Docker build context** — QA supplies its own compose file,
-its own env vars, its own port mappings, and its own nginx config; nothing from the dev repo's
-`docker-compose.yml` or `doc/DEPLOYMENT_LIGHTSAIL.md` is executed directly. Bumping the pinned ref
-is a one-line change reviewed like any other change in this repo.
+`DAYFLOW_PINNED_REF` at the repo root holds the exact tag/commit currently under test (started at
+`v2.3.0`, matching the onboarding doc; currently a raw 40-char commit SHA — see
+`docs/TECHNICAL_PLAN.md`'s Phase 0 note for why). `npm run checkout:dev-ref` (wraps
+[scripts/checkout-dev-ref.mjs](../scripts/checkout-dev-ref.mjs)) does a shallow, read-only checkout
+of `https://github.com/josephcjai/DayFlow.git` into `.dev-checkout/` (gitignored, never committed,
+never pushed anywhere): `git clone --branch <ref> --depth 1` when the ref is a tag/branch name, or
+`git fetch --depth 1 origin <sha>` + `checkout FETCH_HEAD` when it's a raw commit SHA (`git clone
+--branch` doesn't accept one, even though GitHub will serve it directly by SHA). `docker-compose.
+test.yml` then uses that checkout purely as a **Docker build context** — QA supplies its own
+compose file, its own env vars, its own port mappings, and its own nginx config; nothing from the
+dev repo's `docker-compose.yml` or `doc/DEPLOYMENT_LIGHTSAIL.md` is executed directly. Bumping the
+pinned ref is a one-line change reviewed like any other change in this repo.
 
 ## 4. Port map — and why hostname matters as much as port
 
