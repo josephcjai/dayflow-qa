@@ -1,5 +1,6 @@
 <!--
-  QA-owned pinned copy. Source: DayFlow/docs/API_DOCUMENTATION.md at DAYFLOW_PINNED_REF (v2.3.0).
+  QA-owned pinned copy. Source: DayFlow/docs/API_DOCUMENTATION.md at DAYFLOW_PINNED_REF
+  (f0d3ebb, 2026-09-08 — "fix(api): guard todo PATCH against empty body and update API docs").
   Everything below the next line is copied verbatim from that file — do not hand-edit it.
   `npm run contract:check` diffs this against the live copy inside the checked-out pinned ref and
   fails loudly on drift (see check-contract-drift.mjs and docs/TECHNICAL_PLAN.md's "Contract
@@ -24,6 +25,15 @@ All protected endpoints require an `Authorization` HTTP header with a valid JWT 
 Authorization: Bearer <your_jwt_token_here>
 Content-Type: application/json
 ```
+
+---
+
+## 📅 Global Date Sanity Validation Rules
+
+All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefix, and habit `logTime` date prefix) enforce calendar sanity bounds:
+- **Format:** `YYYY-MM-DD` (e.g. `2026-08-10`)
+- **Range:** Must be between `1800-01-01` and `2200-12-31` (inclusive)
+- **Validation:** Dates must represent real calendar dates. Any date outside this range or invalid dates (such as `2026-02-30`) return `400 Bad Request`.
 
 ---
 
@@ -213,9 +223,11 @@ Content-Type: application/json
     "weekStart": "2026-08-10",
     "name": "Drink Water",
     "pts": 5,
-    "notes": "Hydration log"
+    "notes": "Hydration log",
+    "logTime": "2026-08-10 01:15 PM"
   }
   ```
+  *(Note: `logTime` is optional. If provided with a `YYYY-MM-DD` prefix, the date must be within 1800-01-01 and 2200-12-31).*
 - **Success Response (200 OK):**
   ```json
   {
@@ -224,7 +236,7 @@ Content-Type: application/json
       "id": 1723456789000,
       "name": "Drink Water",
       "pts": 5,
-      "time": "01:15 PM",
+      "time": "2026-08-10 01:15 PM",
       "notes": "Hydration log"
     }
   }
@@ -259,10 +271,19 @@ Content-Type: application/json
       {
         "id": "c1f7a2b0-1234-5678-90ab-cdef12345678",
         "text": "Review Weekly Goals",
-        "completed": true
+        "completed": true,
+        "priority": "High",
+        "category": "Work",
+        "dueDate": "2026-08-14"
       }
     ],
-    "notes": "Weekly focus notes..."
+    "notes": "Weekly focus notes...",
+    "noteSheets": [
+      { "id": "journal", "title": "Weekly Journal", "icon": "📓", "content": "Weekly focus notes...", "isDefault": true },
+      { "id": "tech", "title": "Tech & Architecture", "icon": "💻", "content": "", "isDefault": true },
+      { "id": "backlog", "title": "Sprint Backlog", "icon": "💼", "content": "", "isDefault": true },
+      { "id": "scratchpad", "title": "Quick Scratchpad", "icon": "⚡", "content": "", "isDefault": true }
+    ]
   }
   ```
 
@@ -276,9 +297,13 @@ Content-Type: application/json
   ```json
   {
     "weekStart": "2026-08-10",
-    "text": "Review Weekly Goals"
+    "text": "Review Weekly Goals",
+    "priority": "High",
+    "category": "Work",
+    "dueDate": "2026-08-14"
   }
   ```
+  *(Note: `priority`, `category`, and `dueDate` are optional. If provided, `dueDate` must be a valid calendar date between 1800-01-01 and 2200-12-31).*
 - **Success Response (200 OK):**
   ```json
   {
@@ -286,27 +311,41 @@ Content-Type: application/json
     "todo": {
       "id": "c1f7a2b0-1234-5678-90ab-cdef12345678",
       "text": "Review Weekly Goals",
-      "completed": false
+      "completed": false,
+      "priority": "High",
+      "category": "Work",
+      "dueDate": "2026-08-14"
     }
   }
   ```
 
 ---
 
-### 4.3 Toggle Todo Completion
+### 4.3 Update Todo Item (Completion & Due Date)
 
 - **URL:** `PATCH /api/todos/:id`
 - **Auth Required:** Yes (`Bearer <token>`)
 - **Request Body:**
   ```json
   {
-    "completed": true
+    "completed": true,
+    "dueDate": "2026-08-15"
   }
   ```
+  *(Note: Both fields are optional:*
+  - `completed`: `boolean` (toggle completed status)
+  - `dueDate`: string `YYYY-MM-DD` (1800–2200) to set or update, or `null` to clear the due date.
+  - If neither field is provided in the body (e.g. `{}`), the endpoint behaves as a safe no-op existence check, returning `200 OK` if the todo exists for the authenticated user and leaving all fields unchanged. If the todo does not exist or belongs to another user, `404 Not Found` is returned.*)
 - **Success Response (200 OK):**
   ```json
   {
     "message": "Todo updated successfully"
+  }
+  ```
+- **Error Response (404 Not Found):**
+  ```json
+  {
+    "error": "Todo item not found or unauthorized"
   }
   ```
 
@@ -325,7 +364,7 @@ Content-Type: application/json
 
 ---
 
-### 4.5 Save Weekly Scratchpad Notes
+### 4.5 Save Weekly Scratchpad Notes & Multi-Sheets
 
 - **URL:** `POST /api/todos/notes`
 - **Auth Required:** Yes (`Bearer <token>`)
@@ -333,13 +372,46 @@ Content-Type: application/json
   ```json
   {
     "weekStart": "2026-08-10",
-    "notes": "Weekly summary notes..."
+    "notes": "Weekly summary notes...",
+    "noteSheets": [
+      {
+        "id": "journal",
+        "title": "Weekly Journal",
+        "icon": "📓",
+        "content": "Weekly summary notes...",
+        "isDefault": true
+      },
+      {
+        "id": "custom-1723456789",
+        "title": "Project Alpha",
+        "icon": "🚀",
+        "content": "Phase 1 rollout details...",
+        "isDefault": false
+      }
+    ]
   }
   ```
+  *(Note: `notes` and `noteSheets` are optional. The `journal` sheet's content automatically synchronizes with the legacy `weekly_notes` column).*
 - **Success Response (200 OK):**
   ```json
   {
-    "message": "Notes updated successfully"
+    "message": "Notes updated successfully",
+    "noteSheets": [
+      {
+        "id": "journal",
+        "title": "Weekly Journal",
+        "icon": "📓",
+        "content": "Weekly summary notes...",
+        "isDefault": true
+      },
+      {
+        "id": "custom-1723456789",
+        "title": "Project Alpha",
+        "icon": "🚀",
+        "content": "Phase 1 rollout details...",
+        "isDefault": false
+      }
+    ]
   }
   ```
 

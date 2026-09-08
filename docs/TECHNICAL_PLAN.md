@@ -9,13 +9,13 @@ Companion to [ARCHITECTURE.md](ARCHITECTURE.md) (the *what/where*) — this is t
 - **Done when:** `npm run stack:up && curl http://localhost:5100/api/health` succeeds from a clean
   clone with nothing manually configured beyond Docker + the one hosts-file entry.
 
-**Pinned to a raw commit SHA as of 2026-09-07, not `v2.3.0`.** Three feature commits landed on
-`main` after `v2.3.0` was tagged (`75e65e7`) — multi-sheet Markdown notes, todo due dates, and
-server-side date-range validation (1800–2200) — with no new tag cut for them yet.
-`DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`6fb7686`); `checkout-dev-ref.mjs`
-fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since `git clone --branch`
-doesn't accept one. Same suggestion as before: a tag for this point would let the pin be a name
-again instead of a SHA.
+**Pinned to a raw commit SHA as of 2026-09-08, not `v2.3.0`.** Four feature/fix commits have landed
+on `main` after `v2.3.0` was tagged (`75e65e7`) — multi-sheet Markdown notes, todo due dates,
+server-side date-range validation (1800–2200), and the Finding 04 fix — with no new tag cut for any
+of them yet. `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`f0d3ebb`);
+`checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
+`git clone --branch` doesn't accept one. Same suggestion as before, now asked three times: a tag
+for this point would let the pin be a name again instead of a SHA.
 
 **CI automation removed (2026-09-02) — run these by hand instead.** A GitHub Actions workflow
 existed here (checkout pinned ref → stack up → `test:api`/`test:e2e` → teardown, plus
@@ -94,13 +94,12 @@ now that it's confirmed fixed — the test now only restarts `postgres-qa`, whic
 live regression guard: if the crash-on-disconnect bug ever comes back, this is the test that would
 catch it.
 
-**Finding 04, confirmed live 2026-09-07, not yet filed:** `08-todo-due-dates.spec.ts`'s empty-PATCH
-case — `PATCH /api/todos/:id` with an empty body (`{}`, or any body naming neither `completed` nor
-`dueDate`) silently sets `is_completed = false` regardless of the item's current state, because the
-handler's final `else` branch runs `SET is_completed = !!completed` unconditionally when neither
-field was provided. **Red today**, reproduced live twice. See
-[reports/2026-09-07-qa-new-features.md](../reports/2026-09-07-qa-new-features.md) for repro steps
-and the suggested fix.
+~~**Finding 04**~~ — confirmed live 2026-09-07, **fixed** 2026-09-08 (commit `f0d3ebb`). `PATCH
+/api/todos/:id` with an empty body used to silently set `is_completed = false` regardless of
+current state; the handler now has a dedicated no-op branch (existence-check only) when neither
+`completed` nor `dueDate` is provided. Verified live: `08-todo-due-dates.spec.ts`'s regression case
+passes now, full suite 90/90. See
+[reports/2026-09-08-qa-retest.md](../reports/2026-09-08-qa-retest.md).
 
 **Done when:** all 11 items in the onboarding's §7 regression checklist have a corresponding
 automated assertion, and the suite's outcome (pass, or a red test with a filed issue behind it) is

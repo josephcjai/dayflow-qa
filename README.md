@@ -33,6 +33,8 @@ or renaming a test).
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
 suggestions for whatever the suite turned up on a given run.
 
+- [2026-09-08-qa-retest.md](reports/2026-09-08-qa-retest.md) — retest against the dev team's fix:
+  **Finding 04 confirmed resolved**, 90/90 checks passing.
 - [2026-09-07-qa-new-features.md](reports/2026-09-07-qa-new-features.md) — coverage for 3 new
   feature commits (due dates, note sheets, date-range validation) plus **1 new finding**, 89/90
   checks passing.

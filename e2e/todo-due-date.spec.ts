@@ -45,6 +45,10 @@ test.describe('todo due date', () => {
 
     await page.fill('#todoInput', 'Plan for tomorrow');
     await page.click('#todoDueTomorrowBtn');
+    // Wait for the click's UI update to actually land before submitting — confirmed live that
+    // pressing Enter immediately after the click can race the button handler under load and the
+    // submit gets dropped (the todo never appears at all). Same fix as the "Today" test above.
+    await expect(page.locator('#todoDueDateInput')).not.toHaveValue('');
     await page.locator('#todoInput').press('Enter');
 
     const item = page.locator('#todoList li', { hasText: 'Plan for tomorrow' });
