@@ -12,7 +12,7 @@
  * One shared user for the whole file (via beforeAll), not one per test: none of these checks test
  * isolation between callers, just validation behavior for a single caller — registering fresh per
  * `it.each` case (4 dates × 3 blocks) was needlessly burning through the shared auth rate-limit
- * budget the whole numbered suite has to fit inside before 10-proxy.spec.ts's own deliberate
+ * budget the whole numbered suite has to fit inside before 13-proxy.spec.ts's own deliberate
  * exhaustion. Confirmed live: the full suite hit 429s mid-run before this fix.
  */
 import { describe, it, expect, beforeAll } from 'vitest';

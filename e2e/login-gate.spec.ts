@@ -38,6 +38,21 @@ test.describe('login gate', () => {
     await expect(page.locator('#app')).toBeHidden();
   });
 
+  test('the Google sign-in option appears on the login screen when the server reports it configured', async ({
+    page,
+  }) => {
+    // Added 2026-09-09 for the new Google Sign-In feature (commit d922a30). Confirmed against
+    // src/js/app.js: the section is unconditionally shown as soon as /auth/config returns a
+    // non-empty googleClientId and Google's own script has loaded — that part doesn't depend on
+    // the client ID actually being valid, so this is safe to check even with the fake QA value
+    // (see docker-compose.test.yml). What this deliberately does NOT do: click the button or
+    // attempt an actual sign-in — that needs a real Google account and consent flow, which no
+    // automated test can provide. See api/11-google-auth.spec.ts's header for the full reasoning.
+    await page.goto('/');
+    await expect(page.locator('#googleAuthSection')).toBeVisible();
+    await expect(page.locator('#googleSignInBtn')).toBeVisible();
+  });
+
   test('logout returns to the login screen', async ({ page }) => {
     const email = `qa-e2e-${randomUUID()}@dayflow-qa.test`;
     await page.goto('/');

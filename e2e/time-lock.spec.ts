@@ -35,9 +35,13 @@ async function openSlotModal(page: import('@playwright/test').Page, targetDate: 
   // Monday's column regardless of the target date, since Monday is first in DOM order — that
   // silently passed both "past" and "future" cases before real dates ever put a Monday in the
   // wrong bucket. Filtering by data-day-name too is what actually pins down the intended day.
+  // dblclick, not click — confirmed against grid.js (commit d922a30, 2026-09-09): a single click
+  // on a cell now only *selects* it (first click) or opens the modal if already selected (second
+  // click), for the new copy/paste/multi-select cell interactions. dblclick's own handler always
+  // opens the modal directly regardless of selection state.
   await page
     .locator(`td.slot-cell[data-time-label="${timeLabel}"][data-day-name="${dayName(targetDate)}"]`)
-    .click();
+    .dblclick();
 }
 
 test.describe('Planned Task time-lock', () => {

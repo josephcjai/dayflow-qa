@@ -56,6 +56,8 @@ services:
       DB_NAME: ${DB_NAME:-dayflow_qa}
       DB_USER: ${DB_USER:-dayflow_qa}
       DB_PASSWORD: ${DB_PASSWORD:-dayflow_qa_test_only}
+      # Fake, shaped-like-real value — see .env.test.example for why this is set at all.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-123456789-qa-fake-client-id.apps.googleusercontent.com}
     ports:
       - "${QA_API_PORT:-5100}:5000"
 

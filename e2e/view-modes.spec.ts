@@ -38,7 +38,11 @@ test.describe('schedule grid view modes', () => {
 
     // Create a Work slot via the modal so the filter has something to prove.
     const workCell = page.locator('td.slot-cell').first();
-    await workCell.click();
+    // dblclick, not click — confirmed against grid.js (commit d922a30, 2026-09-09): a single
+    // click on a cell now only *selects* it (first click) or opens the modal if it was already
+    // selected (second click), supporting the new copy/paste/multi-select cell interactions.
+    // dblclick's own handler always opens the modal directly regardless of selection state.
+    await workCell.dblclick();
     await page.fill('#plannedTaskInput', 'Filtered Work Task');
     await page.fill('#actualTaskInput', 'Filtered Work Task');
     await page.selectOption('#taskCategorySelect', 'Work');

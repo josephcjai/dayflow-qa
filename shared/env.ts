@@ -22,7 +22,7 @@ export const ENV = {
   apiBaseUrl: envOr('API_BASE_URL', 'http://localhost:5100/api'),
   // Only Playwright/browser-loaded pages need the special hostname (see ARCHITECTURE.md §4 —
   // it's the frontend's own hostname-sniffing logic that cares, not nginx). Raw-HTTP Layer 1
-  // tests that go through nginx on purpose (api/10-proxy.spec.ts) use proxyBaseUrl instead, so
+  // tests that go through nginx on purpose (api/13-proxy.spec.ts) use proxyBaseUrl instead, so
   // they don't force a hosts-file dependency onto the API suite.
   e2eBaseUrl: envOr('E2E_BASE_URL', 'http://dayflow-qa.local:8280'),
   proxyBaseUrl: `http://localhost:${envOr('QA_WEB_PORT', '8280')}`,
