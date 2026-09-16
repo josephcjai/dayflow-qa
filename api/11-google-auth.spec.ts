@@ -24,10 +24,20 @@
  * test: a Google-only account (no password set — `password_hash` is now nullable, confirmed in
  * schema.sql) attempting the *regular* `POST /api/auth/login` with any password. That specific
  * scenario requires a Google-linked user to exist, which (per the paragraph above) this suite has
- * no way to create. Checked instead via an isolated bcryptjs test (not against DayFlow at all):
- * `bcrypt.compare(password, null)` throws `Illegal arguments: string, object`, uncaught by
- * anything in the login handler, so it would surface as a raw 500, not a clean 401. See the
- * report for the full account of how that was verified.
+ * no way to create. Originally checked via an isolated bcryptjs test (not against DayFlow at
+ * all): `bcrypt.compare(password, null)` throws `Illegal arguments: string, object`, uncaught by
+ * anything in the login handler, surfacing as a raw 500, not a clean 401 — reported as Finding 05
+ * (2026-09-09).
+ *
+ * UPDATE 2026-09-16 — commit 967a679 fixed this: `authRoutes.ts`'s `/login` handler now checks
+ * `if (!passwordHash) return res.status(401).json({ error: 'This account was created with
+ * Google Sign-In...' })` before ever calling `bcrypt.compare`, closing off exactly the throw
+ * condition confirmed above. Confirmed via source diff (the guard is a straightforward, minimal
+ * fix directly addressing the null case) plus the fact that the rest of this file's and
+ * 01-auth.spec.ts's regular-login paths still pass — the null-hash scenario itself remains
+ * impossible to live-reproduce black-box for the same reason as ever (no way to self-provision a
+ * Google-linked test user through the public API), so this fix is source-confirmed, not
+ * black-box-confirmed. See the 2026-09-16 report for the full account.
  */
 import { describe, it, expect } from 'vitest';
 import { ApiClient } from '../shared/apiClient.js';

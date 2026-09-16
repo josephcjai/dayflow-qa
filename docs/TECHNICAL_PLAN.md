@@ -9,15 +9,16 @@ Companion to [ARCHITECTURE.md](ARCHITECTURE.md) (the *what/where*) — this is t
 - **Done when:** `npm run stack:up && curl http://localhost:5100/api/health` succeeds from a clean
   clone with nothing manually configured beyond Docker + the one hosts-file entry.
 
-**Pinned to a raw commit SHA as of 2026-09-09, not `v2.3.0`.** Nine feature/fix commits have now
+**Pinned to a raw commit SHA as of 2026-09-16, not `v2.3.0`.** Ten feature/fix commits have now
 landed on `main` after `v2.3.0` was tagged (`75e65e7`) — multi-sheet Markdown notes, todo due
-dates, server-side date-range validation (1800–2200), the Finding 04 fix, and as of this round
-**Google Sign-In**, an extensively-rewritten `PATCH /api/todos/:id`, and several localStorage-only
-UI persistence features — with no new tag cut for any of them yet. `DAYFLOW_PINNED_REF` now holds
-the exact 40-char commit SHA (`d922a30`); `checkout-dev-ref.mjs` fetches an exact SHA directly
-(`git fetch --depth 1 origin <sha>`) since `git clone --branch` doesn't accept one. Same suggestion
-as before, now asked four times: a tag for this point would let the pin be a name again instead of
-a SHA.
+dates, server-side date-range validation (1800–2200), the Finding 04 fix, Google Sign-In, an
+extensively-rewritten `PATCH /api/todos/:id`, several localStorage-only UI persistence features,
+and as of this round **the Finding 05 fix** (`authRoutes.ts`'s `/login` now guards against a
+missing password hash) plus a full `docs/API_DOCUMENTATION.md` catch-up — with no new tag cut for
+any of them yet. `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`967a679`);
+`checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
+`git clone --branch` doesn't accept one. Same suggestion as before, now asked **five** times: a
+tag for this point would let the pin be a name again instead of a SHA.
 
 **CI automation removed (2026-09-02) — run these by hand instead.** A GitHub Actions workflow
 existed here (checkout pinned ref → stack up → `test:api`/`test:e2e` → teardown, plus
@@ -114,19 +115,18 @@ current state; the handler now has a dedicated no-op branch (existence-check onl
 passes now, full suite 90/90. See
 [reports/2026-09-08-qa-retest.md](../reports/2026-09-08-qa-retest.md).
 
-**Finding 05, identified 2026-09-09, not encoded as an automated test (can't be — see below), not
-yet filed:** a Google-linked account (no password set — `password_hash` is nullable as of commit
-`d922a30`) attempting the regular `POST /api/auth/login` with any password would get a raw `500`,
-not a clean `401`. `bcrypt.compare(password, user.password_hash || user.passwordHash)` becomes
-`bcrypt.compare(password, null)` for such a user, and bcryptjs throws
-(`Illegal arguments: string, object`) rather than resolving `false` — confirmed via an isolated
-test of the bcryptjs library itself, not a live reproduction against DayFlow, since creating a
-real Google-linked test user requires an actual Google account (see `api/11-google-auth.spec.ts`'s
-header for the full reasoning on why that path can't be black-box tested). High confidence despite
-not being live-reproduced: the exact library call and exact failure mode are both confirmed, only
-the specific account state (`password_hash IS NULL`) that triggers it couldn't be manufactured
-through the public API. See
-[reports/2026-09-09-qa-new-features.md](../reports/2026-09-09-qa-new-features.md).
+~~**Finding 05**~~ — identified 2026-09-09 (via source review + an isolated bcryptjs test, not a
+live reproduction — see `api/11-google-auth.spec.ts`'s header for the full reasoning on why a real
+Google-linked test user can't be self-provisioned through the public API), **fixed** 2026-09-16
+(commit `967a679`, `fix(auth): guard login against missing password_hash for Google-only users`).
+`authRoutes.ts`'s `/login` handler now checks `if (!passwordHash) return res.status(401)...`
+before ever calling `bcrypt.compare`, closing off exactly the null-hash throw confirmed in the
+original finding, and returns an actionable message ("This account was created with Google
+Sign-In..."). Confirmed via source diff (a minimal, direct fix, matching the guard the report
+suggested almost verbatim) plus the full regression suite staying green — same as the finding
+itself, this fix cannot be live-reproduced/black-box-confirmed against a real Google-linked
+account for the same self-provisioning reason. See
+[reports/2026-09-16-qa-retest.md](../reports/2026-09-16-qa-retest.md).
 
 **Done when:** all 11 items in the onboarding's §7 regression checklist have a corresponding
 automated assertion, and the suite's outcome (pass, or a red test with a filed issue behind it) is
@@ -201,9 +201,10 @@ loudly on drift, per onboarding §8 — the goal is QA discovering a breaking AP
 explicit check failure, not from a mysteriously red assertion three files away.
 
 **Worth knowing: `contract:check` passing doesn't mean the docs are current, only that they haven't
-drifted from what QA already pinned.** As of 2026-09-09, `docs/API_DOCUMENTATION.md` still doesn't
-mention `/auth/config`, `/auth/google`, or the `text`/`priority`/`category` fields on `PATCH
-/api/todos/:id` — none of that changed the file this commit touched, so the check is legitimately
-green, but the dev team's own contract doc is now behind their own API on two features in a row
-(the same gap flagged for `dueDate`/`noteSheets` on 2026-09-07 was fixed 2026-09-08; this is a new
-instance of the same pattern).
+drifted from what QA already pinned.** The `/auth/config`, `/auth/google`, and
+`text`/`priority`/`category` PATCH fields gap flagged on 2026-09-09 was fixed 2026-09-16 (commit
+`967a679` documents all of it, confirmed by direct diff against the actual API — see
+[reports/2026-09-16-qa-retest.md](../reports/2026-09-16-qa-retest.md)) — the second time in a row
+this exact lag-then-catch-up pattern has played out (`dueDate`/`noteSheets` was the first, flagged
+2026-09-07, fixed 2026-09-08). `contract/API_CONTRACT.md` has been refreshed to the current pin
+accordingly.

@@ -1,13 +1,3 @@
-<!--
-  QA-owned pinned copy. Source: DayFlow/docs/API_DOCUMENTATION.md at DAYFLOW_PINNED_REF
-  (f0d3ebb, 2026-09-08 — "fix(api): guard todo PATCH against empty body and update API docs").
-  Everything below the next line is copied verbatim from that file — do not hand-edit it.
-  `npm run contract:check` diffs this against the live copy inside the checked-out pinned ref and
-  fails loudly on drift (see check-contract-drift.mjs and docs/TECHNICAL_PLAN.md's "Contract
-  drift" section). When the dev team ships a contract change, re-copy their file here as part of
-  bumping DAYFLOW_PINNED_REF, in the same commit.
--->
-
 # DayFlow REST API Documentation
 
 **Version:** 2.3.0  
@@ -111,6 +101,49 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
     }
   }
   ```
+
+---
+
+### 1.4 Get Public Auth Configuration
+
+- **URL:** `GET /api/auth/config`
+- **Auth Required:** No
+- **Success Response (200 OK):**
+  ```json
+  {
+    "googleClientId": "<google_client_id>.apps.googleusercontent.com"
+  }
+  ```
+
+---
+
+### 1.5 Google Identity Services Login & Registration
+
+- **URL:** `POST /api/auth/google`
+- **Auth Required:** No
+- **Request Body:**
+  ```json
+  {
+    "credential": "<google_id_token_jwt>"
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "Google authentication successful",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6...",
+    "user": {
+      "id": "e4f8b6b1-0987-4321-abcd-123456789abc",
+      "email": "user@gmail.com",
+      "displayName": "User Name",
+      "avatarUrl": "https://lh3.googleusercontent.com/a/..."
+    }
+  }
+  ```
+- **Error Responses:**
+  - `400 Bad Request`: `{ "error": "Google credential token is required" }`
+  - `401 Unauthorized`: `{ "error": "Invalid Google credential: ..." }`
+  - `500 Internal Server Error`: `{ "error": "GOOGLE_CLIENT_ID is not configured in the server environment (.env)" }`
 
 ---
 
@@ -321,33 +354,39 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
 
 ---
 
-### 4.3 Update Todo Item (Completion & Due Date)
+### 4.3 Update Todo Item (Atomic Partial Update)
 
 - **URL:** `PATCH /api/todos/:id`
 - **Auth Required:** Yes (`Bearer <token>`)
-- **Request Body:**
+- **Request Body (all fields optional for atomic partial updates):**
   ```json
   {
+    "text": "Updated task title",
+    "priority": "High",
+    "category": "Work",
     "completed": true,
     "dueDate": "2026-08-15"
   }
   ```
-  *(Note: Both fields are optional:*
+  *(Note: All fields are optional:*
+  - `text`: `string` (must not be empty if provided)
+  - `priority`: `string` (`High`, `Medium`, or `Low`)
+  - `category`: `string` (e.g. `Work`, `Learning`, `General`)
   - `completed`: `boolean` (toggle completed status)
-  - `dueDate`: string `YYYY-MM-DD` (1800–2200) to set or update, or `null` to clear the due date.
-  - If neither field is provided in the body (e.g. `{}`), the endpoint behaves as a safe no-op existence check, returning `200 OK` if the todo exists for the authenticated user and leaving all fields unchanged. If the todo does not exist or belongs to another user, `404 Not Found` is returned.*)
+  - `dueDate`: string `YYYY-MM-DD` (1800–2200) to set/update, or `null` / `""` to clear the due date.
+  - If no update fields are provided in the body (e.g. `{}`), the endpoint behaves as a safe no-op existence check, returning `200 OK` if the todo exists for the authenticated user and leaving all fields unchanged. If the todo does not exist or belongs to another user, `404 Not Found` is returned.*)
 - **Success Response (200 OK):**
   ```json
   {
     "message": "Todo updated successfully"
   }
   ```
-- **Error Response (404 Not Found):**
-  ```json
-  {
-    "error": "Todo item not found or unauthorized"
-  }
-  ```
+- **Error Responses:**
+  - `400 Bad Request`: Validation errors:
+    - `{ "error": "Invalid priority: must be High, Medium, or Low" }`
+    - `{ "error": "Task text cannot be empty" }`
+    - `{ "error": "Invalid dueDate: must be between 1800-01-01 and 2200-12-31" }`
+  - `404 Not Found`: `{ "error": "Todo item not found or unauthorized" }`
 
 ---
 
