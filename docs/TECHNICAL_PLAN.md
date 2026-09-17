@@ -9,16 +9,19 @@ Companion to [ARCHITECTURE.md](ARCHITECTURE.md) (the *what/where*) — this is t
 - **Done when:** `npm run stack:up && curl http://localhost:5100/api/health` succeeds from a clean
   clone with nothing manually configured beyond Docker + the one hosts-file entry.
 
-**Pinned to a raw commit SHA as of 2026-09-16, not `v2.3.0`.** Ten feature/fix commits have now
-landed on `main` after `v2.3.0` was tagged (`75e65e7`) — multi-sheet Markdown notes, todo due
-dates, server-side date-range validation (1800–2200), the Finding 04 fix, Google Sign-In, an
-extensively-rewritten `PATCH /api/todos/:id`, several localStorage-only UI persistence features,
-and as of this round **the Finding 05 fix** (`authRoutes.ts`'s `/login` now guards against a
-missing password hash) plus a full `docs/API_DOCUMENTATION.md` catch-up — with no new tag cut for
-any of them yet. `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`967a679`);
-`checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
-`git clone --branch` doesn't accept one. Same suggestion as before, now asked **five** times: a
-tag for this point would let the pin be a name again instead of a SHA.
+**Pinned to a raw commit SHA as of 2026-09-17, not `v2.3.0`.** Thirteen feature/fix commits have
+now landed on `main` after `v2.3.0` was tagged (`75e65e7`) — multi-sheet Markdown notes, todo due
+dates, server-side date-range validation (1800–2200), the Finding 04 and 05 fixes, Google Sign-In,
+an extensively-rewritten `PATCH /api/todos/:id`, several localStorage-only UI persistence features,
+and as of this round a large "production hardening" push (Helmet, CORS, a decoupled migration
+script, HTTPS reverse proxy config, graceful shutdown, error-message masking) plus a new
+date-specific Daily Journal note sheet — with no new tag cut for any of them yet, despite this
+round's changes being explicitly framed as making the app production-ready. `DAYFLOW_PINNED_REF`
+now holds the exact 40-char commit SHA (`6474194`); `checkout-dev-ref.mjs` fetches an exact SHA
+directly (`git fetch --depth 1 origin <sha>`) since `git clone --branch` doesn't accept one. Same
+suggestion as before, now asked **six** times: a tag for this point would let the pin be a name
+again instead of a SHA — arguably more warranted than ever now that "production ready" is the
+claim being made without one.
 
 **CI automation removed (2026-09-02) — run these by hand instead.** A GitHub Actions workflow
 existed here (checkout pinned ref → stack up → `test:api`/`test:e2e` → teardown, plus
@@ -74,6 +77,13 @@ container lifetime, and the last file deliberately exhausts it (see vitest.confi
     `shared/env.ts`'s `proxyBaseUrl`), so proxy header handling is actually exercised without
     pulling in the e2e layer's hosts-file dependency. Renumbered twice now (07 → 10 → 13) as new
     files needed to slot in ahead of it — always runs last, on purpose, see file-level comments.
+12. `api/14-production-hardening.spec.ts` — added 2026-09-17 for commit `1be7769`'s Helmet headers,
+    the new structured 404 fallback for an unmatched `/api` route, the richer `GET /api/health`
+    (now a real `SELECT 1` against Postgres, not just process liveness), and the 200kb request body
+    limit — everything from that commit observable regardless of `NODE_ENV`. The parts that only
+    activate under `NODE_ENV=production` (error-message masking, and the removed in-memory-store
+    fallback on a DB failure) need a dedicated environment instead — see
+    `prodcheck/15-production-mode.spec.ts` and `docker-compose.prodcheck.yml` below.
 
    **Side effect to know about before sharing an environment:** this file deliberately exhausts
    the auth rate limiter. Before the 2026-08-31 fix (see below) that lockout was shared by
@@ -128,9 +138,67 @@ itself, this fix cannot be live-reproduced/black-box-confirmed against a real Go
 account for the same self-provisioning reason. See
 [reports/2026-09-16-qa-retest.md](../reports/2026-09-16-qa-retest.md).
 
+**Finding 06, identified 2026-09-17, confirmed both by source review and by intermittent live
+reproduction (roughly 1 run in 3–6, not deterministic — see below for why):** every notes save
+(the 600ms autosave debounce in `app.js`'s `flushNotesToApi`, and the blur-triggered
+`flushCurrentNoteEditor` in `notes.js`, used for all 5 note sheets including the new Daily Journal)
+fires `ApiClient.saveNotes(...)` **without awaiting it**, and marks the UI "Saved" the instant the
+request is sent, not when it completes. Confirmed by direct source read of both functions.
+Navigating to a different day/week immediately after an edit doesn't wait for that in-flight
+write, so a fast enough subsequent navigation (or a page reload) can race ahead of it — reproduced
+live while writing `e2e/daily-journal.spec.ts` (full account of the reproduction in that file's
+header) as a silently lost edit: the previously-saved content came back empty after switching days
+twice more and reloading. The Daily Journal feature makes this far easier to trigger than before
+(switching *days* mid-session is routine; switching *weeks* was the only way to hit this
+previously, a rarer action), but the underlying race is not new to this feature. Suggestion:
+`await` the save (or otherwise queue navigation behind it) before marking the UI "Saved" and before
+`flushCurrentNoteEditor`'s callers (`navigateDate`, the view-mode handler, the date-picker handler)
+proceed to change `STATE.selectedDate`/`currentWeekStart`.
+
+**Finding 07, identified 2026-09-17, by source review of the new `docker-compose.prod.yml`:**
+`api`'s `JWT_SECRET: ${JWT_SECRET:-dayflow_prod_secret_key_2026_94bec832_secure}` falls back to a
+value committed in this public repo if the operator's own `.env` doesn't set one. This silently
+satisfies `authMiddleware.ts`'s own fail-fast guard (`if (NODE_ENV==='production' &&
+!process.env.JWT_SECRET) throw ...`) — the guard checks only whether *some* value is present, not
+whether it's the publicly-known default — so a deployment run straight from this compose file
+without customizing `.env` gets a JWT-signing secret anyone who has read this repository already
+knows, letting them forge valid session tokens for any user against that deployment.
+`server/.env.example`'s own comment ("Must be a secure random 64-char string... Generate via:
+openssl rand -hex 32") already says the right thing; the compose file's fallback just quietly
+defeats it for anyone who doesn't follow that instruction. Suggestion: drop the fallback value
+entirely (`JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see server/.env.example}`, which
+makes Compose itself refuse to start rather than silently substitute a known secret).
+
 **Done when:** all 11 items in the onboarding's §7 regression checklist have a corresponding
 automated assertion, and the suite's outcome (pass, or a red test with a filed issue behind it) is
 understood — not necessarily 100% green, per the findings above.
+
+## Production-mode verification (new 2026-09-17)
+Commit `1be7769` made several behaviors conditional on `NODE_ENV=production` specifically (error
+masking, no silent memory-store fallback on a DB failure) that the regular `api-qa` container never
+exercises — it deliberately stays on `NODE_ENV=test` so the rest of this suite's assertions on
+exact error messages keep working. `docker-compose.prodcheck.yml` adds two opt-in containers
+(`api-qa-prodcheck` — correct DB credentials; `api-qa-prodcheck-baddb` — deliberately wrong DB
+password, to force every DB-touching route to fail) sharing postgres-qa's network, tested by
+`prodcheck/15-production-mode.spec.ts` (its own Vitest config, its own `npm run test:prodmode` —
+deliberately NOT swept into `npm run test:api`, so the regular regression count stays stable
+whether or not a production-mode check happens to run that round). Bring up with `npm run
+prodcheck:up` (after `stack:up`), tear down with `npm run prodcheck:down`. Confirmed live
+2026-09-17: masked 500s on the broken-DB container, normal happy-path behavior (including
+un-masked 400-level validation messages) on the healthy one — see
+[reports/2026-09-17-qa-production-readiness.md](../reports/2026-09-17-qa-production-readiness.md).
+
+## e2e rate-limit budget (new 2026-09-17)
+The e2e suite has grown enough (24 registration/login attempts across 9 files, once this round's 3
+new files were added) that a single clean `test:e2e` run started brushing up against the same
+shared 50-attempts/15-min auth rate limit `api/13-proxy.spec.ts` deliberately exhausts — confirmed
+live with a direct 429 probe against nginx-qa immediately after a run that failed several unrelated
+tests with the "registration never completes" symptom this exact budget exhaustion has always
+produced (not a DayFlow bug — the limiter doing exactly its job against more traffic than before).
+Fixed by splitting `npm run test:e2e` into `test:e2e:batch1`/`batch2` with a `stack:reset-api`
+between them (see package.json and README.md's Quick Start section) — confirmed clean and
+noticeably faster (no retries needed) across two repeated runs. Keep the two batches roughly
+balanced by registration count as new e2e files are added, or this will quietly resurface.
 
 ## Phase 2 — Web E2E (Playwright, kept small)
 Only what genuinely needs a rendered DOM, per the onboarding's scoping call:
@@ -157,6 +225,20 @@ Only what genuinely needs a rendered DOM, per the onboarding's scoping call:
   Google option appears on the login screen once the server reports itself configured. Explicitly
   does not click the button or attempt a real sign-in — see `api/11-google-auth.spec.ts`'s header
   for why that specifically can't be automated.
+- `e2e/daily-journal.spec.ts` — added 2026-09-17 for the new date-specific Daily Journal note sheet
+  (commit `5330565`): switching to Day view auto-activates it (and switching away reverts to the
+  regular Weekly Journal), and each day's content is isolated from every other day and survives a
+  reload. Surfaced Finding 06 (see above) while writing the reload-persistence case.
+- `e2e/month-view-data.spec.ts` — added 2026-09-17 for a real bug fix bundled into the same commit:
+  Month view's day cells used to read every day's task count from whichever ONE week happened to
+  already be loaded, so any other week's days always showed "No tasks" regardless of what was
+  actually scheduled. Creates tasks in two different weeks of the same month and confirms both
+  render correctly — the actual regression the fix addresses, not just "Month view is active."
+- `e2e/note-sheets.spec.ts`'s first test — updated 2026-09-17: now asserts on 5 default sheets, not
+  4. The 5th (`daily_journal`) is injected client-side only — the server's own `defaultSheets()` in
+  `todoRoutes.ts` was NOT updated and still returns 4, so `api/09-note-sheets.spec.ts` (which
+  asserts on the raw API response) correctly did **not** need the same update. See the "also
+  noticed" section of the 2026-09-17 report for why that split is fine, not a bug.
 
 Not yet covered, lower priority than the above (noted so it's a decision, not an oversight):
 Markdown edit/split/preview modes and the formatting toolbar (`src/js/markdown.js`, "Phase 4"),
@@ -208,3 +290,10 @@ drifted from what QA already pinned.** The `/auth/config`, `/auth/google`, and
 this exact lag-then-catch-up pattern has played out (`dueDate`/`noteSheets` was the first, flagged
 2026-09-07, fixed 2026-09-08). `contract/API_CONTRACT.md` has been refreshed to the current pin
 accordingly.
+
+As of 2026-09-17 (commit `6474194`), `docs/API_DOCUMENTATION.md` was updated in the SAME commit as
+the health-check change it documents (version bump, the richer health/degraded response shapes) —
+confirmed accurate against the live API. Not documented there, deliberately not flagged as a gap:
+Helmet's headers, the 200kb payload limit, and the structured 404 fallback — none of those are
+really part of a REST *contract* in the sense this doc otherwise covers (request/response shapes),
+so their absence isn't the same kind of drift as a missing endpoint or field.

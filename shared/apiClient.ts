@@ -13,6 +13,9 @@ export interface ApiResponse<T = any> {
   status: number;
   ok: boolean;
   body: T;
+  /** Lower-cased response header names to values — added 2026-09-17 to check Helmet's security
+   *  headers without reaching for a raw `fetch` in the spec files themselves. */
+  headers: Record<string, string>;
 }
 
 export class ApiClient {
@@ -49,7 +52,29 @@ export class ApiClient {
       parsed = text;
     }
 
-    return { status: res.status, ok: res.ok, body: parsed as T };
+    return { status: res.status, ok: res.ok, body: parsed as T, headers: Object.fromEntries(res.headers.entries()) };
+  }
+
+  /** Raw request bypassing JSON.stringify — for payload-size / malformed-body checks where the
+   *  body must be sent as literal bytes, not re-encoded. */
+  async rawRequest(
+    method: string,
+    path: string,
+    rawBody?: string,
+    extraHeaders: Record<string, string> = {}
+  ): Promise<ApiResponse> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extraHeaders };
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+
+    const res = await fetch(`${this.baseUrl}${path}`, { method, headers, body: rawBody });
+    let parsed: any = undefined;
+    const text = await res.text();
+    try {
+      parsed = text ? JSON.parse(text) : undefined;
+    } catch {
+      parsed = text;
+    }
+    return { status: res.status, ok: res.ok, body: parsed, headers: Object.fromEntries(res.headers.entries()) };
   }
 
   get<T = any>(path: string, extraHeaders?: Record<string, string>) {

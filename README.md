@@ -33,6 +33,10 @@ or renaming a test).
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
 suggestions for whatever the suite turned up on a given run.
 
+- [2026-09-17-qa-production-readiness.md](reports/2026-09-17-qa-production-readiness.md) —
+  coverage for the "production ready" round (Helmet/CORS/error-masking hardening, migration
+  decoupling, HTTPS reverse proxy, Daily Journal), a full end-to-end smoke test of the actual
+  production Docker deployment, plus **2 new findings**, 114/114 regular-suite checks passing.
 - [2026-09-16-qa-retest.md](reports/2026-09-16-qa-retest.md) — retest against the dev team's fix:
   **Finding 05 confirmed resolved**, docs gap confirmed closed, 106/106 checks passing.
 - [2026-09-09-qa-new-features.md](reports/2026-09-09-qa-new-features.md) — coverage for 5 new
@@ -83,6 +87,23 @@ container, no data is lost. (This used to also mean one client's lockout leaked 
 client — a real DayFlow gap, fixed 2026-08-31, see
 [reports/2026-08-31-qa-retest.md](reports/2026-08-31-qa-retest.md). What's left is just the
 limiter doing its job against a shared environment, not a bug.)
+
+**`npm run test:e2e` now runs in two batches with a `stack:reset-api` in between**, as of
+2026-09-17. The suite has grown enough (24 registrations/logins across 9 files at last count) that
+a single clean run started brushing up against the very same shared 50-attempts/15-min budget
+`api/13-proxy.spec.ts` exercises above — confirmed live with a direct 429 probe against nginx-qa
+immediately after a run that failed several unrelated tests with the exact "registration never
+completes" symptom this same budget exhaustion has always produced. Not a DayFlow bug (the limiter
+is doing exactly its job) — a QA-suite scaling issue, fixed by splitting `test:e2e` into
+`test:e2e:batch1`/`batch2` (see package.json) with a reset between them. Keep the two batches
+roughly balanced by registration count as new e2e files are added, or this will quietly resurface.
+
+**Verifying `NODE_ENV=production`-only behavior** (error-message masking, and the removal of every
+route's fallback to the in-memory store on a DB failure — see commit 1be7769) needs two extra,
+opt-in containers neither `test:api` nor `test:e2e` bring up: `npm run prodcheck:up` (after
+`stack:up`), then `npm run test:prodmode`, then `npm run prodcheck:down` when done. See
+`docker-compose.prodcheck.yml` and `prodcheck/15-production-mode.spec.ts` for exactly what these
+check and why they need a dedicated environment.
 
 ## Ground rules (short version)
 

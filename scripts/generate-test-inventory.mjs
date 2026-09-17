@@ -20,6 +20,12 @@ const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const LAYERS = [
   { dir: 'api', label: 'API / integration — `api/` (Vitest + native `fetch`)' },
   { dir: 'e2e', label: 'Web — `e2e/` (Playwright)' },
+  {
+    dir: 'prodcheck',
+    label:
+      'Production mode (opt-in, NOT part of `npm run test:api`) — `prodcheck/` (Vitest, ' +
+      '`npm run test:prodmode` after `npm run prodcheck:up` — see docker-compose.prodcheck.yml)',
+  },
 ];
 
 function specFiles(dir) {

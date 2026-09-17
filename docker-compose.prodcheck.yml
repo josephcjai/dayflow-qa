@@ -1,0 +1,53 @@
+# Opt-in add-on to docker-compose.test.yml — verifies the parts of commit 1be7769's "production
+# hardening" that only activate when NODE_ENV=production (error-message masking, and the removal
+# of every route's silent fallback to the in-memory store on a DB failure). Neither behavior is
+# observable against the regular api-qa container, which deliberately stays on NODE_ENV=test so
+# the rest of this suite's assertions on exact error messages keep working (see
+# docs/TECHNICAL_PLAN.md's "Production-mode verification" note).
+#
+# NOT part of the default stack — bring up with `npm run prodcheck:up` (after `npm run stack:up`;
+# reuses the SAME image that built, never rebuilds dev source separately), test against it with
+# `npm run test:prodmode`, tear down with `npm run prodcheck:down`. Both containers share
+# postgres-qa's network so they can resolve its hostname; neither is ever exposed to nginx-qa or
+# used by the regular test:api / test:e2e runs.
+#
+# Two containers, two different DB credentials, same JWT_SECRET (so a token minted against one
+# verifies against the other — authMiddleware.ts only checks the JWT signature, never touches the
+# DB, confirmed by source read):
+#   - api-qa-prodcheck        — correct DB credentials: production-mode happy-path smoke check.
+#   - api-qa-prodcheck-baddb  — deliberately wrong DB password: forces every DB-touching route to
+#     fail, to confirm production mode masks the resulting error instead of leaking it.
+services:
+  api-qa-prodcheck:
+    image: dayflow-qa-api-qa:latest
+    container_name: dayflow-qa-api-prodcheck
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:-qa-test-only-secret-do-not-use-in-prod}
+      ALLOWED_ORIGINS: ${QA_WEB_ORIGIN:-http://dayflow-qa.local:8280}
+      DB_HOST: postgres-qa
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-dayflow_qa}
+      DB_USER: ${DB_USER:-dayflow_qa}
+      DB_PASSWORD: ${DB_PASSWORD:-dayflow_qa_test_only}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-123456789-qa-fake-client-id.apps.googleusercontent.com}
+    ports:
+      - "${QA_API_PRODCHECK_PORT:-5101}:5000"
+
+  api-qa-prodcheck-baddb:
+    image: dayflow-qa-api-qa:latest
+    container_name: dayflow-qa-api-prodcheck-baddb
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:-qa-test-only-secret-do-not-use-in-prod}
+      ALLOWED_ORIGINS: ${QA_WEB_ORIGIN:-http://dayflow-qa.local:8280}
+      DB_HOST: postgres-qa
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-dayflow_qa}
+      DB_USER: ${DB_USER:-dayflow_qa}
+      DB_PASSWORD: intentionally-wrong-password-for-error-masking-check
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-123456789-qa-fake-client-id.apps.googleusercontent.com}
+    ports:
+      - "${QA_API_PRODCHECK_BADDB_PORT:-5102}:5000"

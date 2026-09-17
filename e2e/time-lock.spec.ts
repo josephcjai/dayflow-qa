@@ -19,8 +19,20 @@ function daysFromNow(offset: number): Date {
   return d;
 }
 
+// Local date components, NOT `.toISOString()` — added 2026-09-17 after a UTC round-trip caused a
+// deterministic failure in a newer spec using this exact pattern (e2e/month-view-data.spec.ts):
+// this machine runs IST (UTC+5:30), and converting a local-midnight-constructed Date to UTC rolls
+// it back to the PREVIOUS calendar day whenever the local offset is positive — the date picker
+// would land one day off from what dayName() (below), which reads the same Date object's LOCAL
+// getters, still reports. This file's own dates are built from "now" at the current time-of-day
+// (daysFromNow), not local midnight, so it only would have broken during the roughly 00:00–05:29
+// IST window — never yet observed here, but the same latent bug, fixed the same way while it was
+// fresh in mind.
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function dayName(d: Date): string {

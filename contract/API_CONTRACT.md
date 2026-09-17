@@ -1,8 +1,8 @@
 # DayFlow REST API Documentation
 
-**Version:** 2.3.0  
+**Version:** 2.4.0  
 **Base URL (Local):** `http://localhost:5000/api`  
-**Base URL (Production):** `/api`  
+**Base URL (Production HTTPS):** `https://<your_domain>/api`  
 **Authentication Method:** JSON Web Token (`Authorization: Bearer <token>`)
 
 ---
@@ -458,7 +458,7 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
 
 ## 5. System Health Check
 
-### 5.1 Health Check Status
+### 5.1 Health Check & Database Readiness Status
 
 - **URL:** `GET /api/health`
 - **Auth Required:** No
@@ -466,7 +466,18 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
   ```json
   {
     "status": "online",
+    "database": "connected",
     "service": "DayFlow API Server",
-    "timestamp": "2026-08-11T16:25:00.000Z"
+    "version": "2.4.0",
+    "timestamp": "2026-09-16T18:50:00.000Z"
+  }
+  ```
+- **Degraded Response (503 Service Unavailable):**
+  ```json
+  {
+    "status": "degraded",
+    "database": "disconnected",
+    "error": "Database connection unavailable",
+    "timestamp": "2026-09-16T18:50:00.000Z"
   }
   ```
