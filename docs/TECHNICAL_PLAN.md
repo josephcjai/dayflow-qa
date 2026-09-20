@@ -9,19 +9,19 @@ Companion to [ARCHITECTURE.md](ARCHITECTURE.md) (the *what/where*) — this is t
 - **Done when:** `npm run stack:up && curl http://localhost:5100/api/health` succeeds from a clean
   clone with nothing manually configured beyond Docker + the one hosts-file entry.
 
-**Pinned to a raw commit SHA as of 2026-09-17, not `v2.3.0`.** Thirteen feature/fix commits have
+**Pinned to a raw commit SHA as of 2026-09-20, not `v2.3.0`.** Fourteen feature/fix commits have
 now landed on `main` after `v2.3.0` was tagged (`75e65e7`) — multi-sheet Markdown notes, todo due
 dates, server-side date-range validation (1800–2200), the Finding 04 and 05 fixes, Google Sign-In,
 an extensively-rewritten `PATCH /api/todos/:id`, several localStorage-only UI persistence features,
-and as of this round a large "production hardening" push (Helmet, CORS, a decoupled migration
-script, HTTPS reverse proxy config, graceful shutdown, error-message masking) plus a new
-date-specific Daily Journal note sheet — with no new tag cut for any of them yet, despite this
-round's changes being explicitly framed as making the app production-ready. `DAYFLOW_PINNED_REF`
-now holds the exact 40-char commit SHA (`6474194`); `checkout-dev-ref.mjs` fetches an exact SHA
-directly (`git fetch --depth 1 origin <sha>`) since `git clone --branch` doesn't accept one. Same
-suggestion as before, now asked **six** times: a tag for this point would let the pin be a name
-again instead of a SHA — arguably more warranted than ever now that "production ready" is the
-claim being made without one.
+a large "production hardening" push (Helmet, CORS, a decoupled migration script, HTTPS reverse
+proxy config, graceful shutdown, error-message masking), a new date-specific Daily Journal note
+sheet, and as of this round the Finding 06/07 fixes plus a Month-view prefetch perf fix — with no
+new tag cut for any of them yet, despite the dev team's own 2026-09-20 reply saying "Tag `v2.4.0`
+is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`432ce86`);
+`checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
+`git clone --branch` doesn't accept one. Same suggestion as before, now asked **seven** times: a
+tag for this point would let the pin be a name again instead of a SHA — the dev team has now
+agreed it's warranted twice without one actually landing.
 
 **CI automation removed (2026-09-02) — run these by hand instead.** A GitHub Actions workflow
 existed here (checkout pinned ref → stack up → `test:api`/`test:e2e` → teardown, plus
@@ -138,36 +138,51 @@ itself, this fix cannot be live-reproduced/black-box-confirmed against a real Go
 account for the same self-provisioning reason. See
 [reports/2026-09-16-qa-retest.md](../reports/2026-09-16-qa-retest.md).
 
-**Finding 06, identified 2026-09-17, confirmed both by source review and by intermittent live
-reproduction (roughly 1 run in 3–6, not deterministic — see below for why):** every notes save
-(the 600ms autosave debounce in `app.js`'s `flushNotesToApi`, and the blur-triggered
-`flushCurrentNoteEditor` in `notes.js`, used for all 5 note sheets including the new Daily Journal)
-fires `ApiClient.saveNotes(...)` **without awaiting it**, and marks the UI "Saved" the instant the
-request is sent, not when it completes. Confirmed by direct source read of both functions.
-Navigating to a different day/week immediately after an edit doesn't wait for that in-flight
-write, so a fast enough subsequent navigation (or a page reload) can race ahead of it — reproduced
-live while writing `e2e/daily-journal.spec.ts` (full account of the reproduction in that file's
-header) as a silently lost edit: the previously-saved content came back empty after switching days
-twice more and reloading. The Daily Journal feature makes this far easier to trigger than before
-(switching *days* mid-session is routine; switching *weeks* was the only way to hit this
-previously, a rarer action), but the underlying race is not new to this feature. Suggestion:
-`await` the save (or otherwise queue navigation behind it) before marking the UI "Saved" and before
-`flushCurrentNoteEditor`'s callers (`navigateDate`, the view-mode handler, the date-picker handler)
-proceed to change `STATE.selectedDate`/`currentWeekStart`.
+**Finding 06, identified 2026-09-17 — PARTIALLY fixed 2026-09-20 (commit `432ce86`), confirmed by
+a live network-request diagnostic, not just re-running the suite until green.** Original issue:
+every notes save fired `ApiClient.saveNotes(...)` without awaiting it, and marked the UI "Saved"
+instantly regardless. Dev's fix made `flushCurrentNoteEditor`/`flushNotesToApi` genuinely `async`,
+awaited by their own caller, with every navigation handler now awaiting the flush before changing
+`STATE.selectedDate`/`currentWeekStart` — that specific mechanism is real and confirmed working via
+source diff. **But a fresh diagnostic (a small standalone script logging every
+`/api/todos/notes` request/response with timestamps) showed the underlying race survives in a more
+general form:** nearly every UI action that touches notes (the date picker, the view-mode buttons,
+the notes nav tab, blur) fires its *own independent* `flushCurrentNoteEditor()` call. Awaiting
+inside one handler only orders that handler's own request relative to itself — it does nothing to
+order it relative to a *different* handler's already-in-flight request. Three-plus independent,
+unsequenced saves firing within the same second or two (exactly what normal rapid navigation
+produces) can still resolve out of order and let an earlier, stale/empty save overwrite a later,
+real one. Reproduced at roughly the same ~30% rate as before the fix across 10 repeated runs of
+`e2e/daily-journal.spec.ts`'s reload-persistence case — not a regression in QA's own test, the
+diagnostic confirmed it directly against the running app. Suggestion: sequence saves for the same
+week/sheet (a simple per-key promise chain/mutex around `ApiClient.saveNotes`, or a
+monotonic version/timestamp the server rejects a stale write against) rather than relying on each
+individual call site awaiting only its own request.
 
-**Finding 07, identified 2026-09-17, by source review of the new `docker-compose.prod.yml`:**
-`api`'s `JWT_SECRET: ${JWT_SECRET:-dayflow_prod_secret_key_2026_94bec832_secure}` falls back to a
-value committed in this public repo if the operator's own `.env` doesn't set one. This silently
-satisfies `authMiddleware.ts`'s own fail-fast guard (`if (NODE_ENV==='production' &&
-!process.env.JWT_SECRET) throw ...`) — the guard checks only whether *some* value is present, not
-whether it's the publicly-known default — so a deployment run straight from this compose file
-without customizing `.env` gets a JWT-signing secret anyone who has read this repository already
-knows, letting them forge valid session tokens for any user against that deployment.
-`server/.env.example`'s own comment ("Must be a secure random 64-char string... Generate via:
-openssl rand -hex 32") already says the right thing; the compose file's fallback just quietly
-defeats it for anyone who doesn't follow that instruction. Suggestion: drop the fallback value
-entirely (`JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see server/.env.example}`, which
-makes Compose itself refuse to start rather than silently substitute a known secret).
+**Finding 07, identified 2026-09-17 — fixed and confirmed 2026-09-20 (commit `432ce86`).**
+`docker-compose.prod.yml`'s `JWT_SECRET: ${JWT_SECRET:-dayflow_prod_secret_key_2026_94bec832_secure}`
+fallback silently satisfied `authMiddleware.ts`'s fail-fast guard with a value committed in this
+public repo. Now reads `JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see
+server/.env.example}` — Compose's own required-variable syntax. Verified directly, not just by
+reading the diff: ran `docker compose -f docker-compose.prod.yml config` with `JWT_SECRET` unset —
+refuses with `required variable JWT_SECRET is missing a value: ...`; with it set, interpolates
+clean. Closed.
+
+**Finding 08 (new), identified 2026-09-20 — a real performance regression introduced BY the
+Finding 06 fix, confirmed live with a network-trace diagnostic.** `flushCurrentNoteEditor()` has no
+dirty-check: it unconditionally calls `ApiClient.saveNotes(...)` every time it runs, and it now
+runs — awaited, i.e. blocking — before *every* navigation action app-wide (`navigateDate`, the
+date-picker handler, the view-mode button handler, `switchView`, `handleSwitchToDayView`), not just
+ones that touch notes. A diagnostic script clicking through view-mode buttons and week navigation
+without ever opening the Notes tab still fired exactly one `POST /api/todos/notes` per click — 6
+redundant saves for 6 clicks that never touched a note. Before the fix this was harmless because it
+was fire-and-forget (never blocked navigation); now every one of those navigation actions
+genuinely waits on a network round trip that saves nothing new. Consistent with a real, measured
+slowdown across this round's *entire* e2e suite (not just notes-related specs) — runs that
+previously completed in ~30s now take ~50s+ with no other change to explain it. Suggestion: skip
+the save when the active sheet's content hasn't actually changed since the last successful save
+(a simple dirty flag set on input/`setSheetContent`, cleared on a successful save, checked at the
+top of `flushCurrentNoteEditor`).
 
 **Done when:** all 11 items in the onboarding's §7 regression checklist have a corresponding
 automated assertion, and the suite's outcome (pass, or a red test with a filed issue behind it) is
@@ -228,7 +243,11 @@ Only what genuinely needs a rendered DOM, per the onboarding's scoping call:
 - `e2e/daily-journal.spec.ts` — added 2026-09-17 for the new date-specific Daily Journal note sheet
   (commit `5330565`): switching to Day view auto-activates it (and switching away reverts to the
   regular Weekly Journal), and each day's content is isolated from every other day and survives a
-  reload. Surfaced Finding 06 (see above) while writing the reload-persistence case.
+  reload. Surfaced Finding 06 (see above) while writing the reload-persistence case, and — after
+  2026-09-20's partial fix — still needs explicit `waitForTimeout` calls between navigation steps
+  to stay reliably green, since the underlying race (see Finding 06's updated writeup) is narrowed
+  but not closed. Not a workaround QA is comfortable calling permanent; revisit once dev sequences
+  saves properly.
 - `e2e/month-view-data.spec.ts` — added 2026-09-17 for a real bug fix bundled into the same commit:
   Month view's day cells used to read every day's task count from whichever ONE week happened to
   already be loaded, so any other week's days always showed "No tasks" regardless of what was

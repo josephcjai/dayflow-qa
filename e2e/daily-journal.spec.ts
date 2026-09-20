@@ -18,15 +18,25 @@ import { registerAndLoginViaUI } from './fixtures.js';
  * Only the day-switching mechanics are covered here; `e2e/note-sheets.spec.ts` covers the tab's
  * mere presence among the 5 defaults.
  *
- * A note on the explicit waits below: confirmed against source (app.js's `flushNotesToApi` and
- * notes.js's `flushCurrentNoteEditor`) that every notes save — on the 600ms autosave debounce AND
- * on blur — fires `ApiClient.saveNotes(...)` WITHOUT awaiting it, and shows "Saved" the instant the
- * request is sent, not when it completes. Navigating to another day/week immediately after
- * doesn't wait for that in-flight write, so it can race the next day's own GET and occasionally
- * lose the edit — reproduced live while writing this file (intermittently, roughly 1 run in 3) and
- * reported as Finding 06 rather than treated as a test flake. The explicit pause below is this
- * test's own accommodation for that real race so it reliably tests day-isolation itself instead of
- * incidentally re-rolling that race on every run.
+ * UPDATE 2026-09-20 — commit 432ce86's fix for Finding 06 is real but PARTIAL, confirmed by a
+ * live network-log diagnostic, not just re-running this file until it passed:
+ *
+ * `flushCurrentNoteEditor`/`flushNotesToApi` are now genuinely `async` and awaited by their own
+ * caller before that caller changes STATE — that part of the original race is closed. But nearly
+ * every UI action that touches notes (the date picker, the view-mode buttons, the notes nav tab,
+ * blur) fires its OWN independent `flushCurrentNoteEditor()` call, each with its own `fetch`. A
+ * diagnostic script logging every `/api/todos/notes` request/response confirmed that switching to
+ * Day view + clicking the Notes tab BEFORE typing anything each fire their own (empty-content)
+ * save, and typing + blurring fires yet another (real-content) save — three-plus independent,
+ * unsequenced requests in quick succession. Nothing stops an EARLIER-fired-but-LATER-resolving
+ * empty save from completing after a real one and overwriting it — awaiting inside one handler
+ * doesn't order that handler's request relative to a DIFFERENT handler's already-in-flight one.
+ * Reproduced at roughly the same ~30% rate as before the fix, across 10 repeated runs. This is
+ * reported as Finding 06 being genuinely narrowed (the specific unawaited-call-before-navigation
+ * bug is real and fixed) but NOT closed — see the 2026-09-20 report for the full account.
+ *
+ * The waits below are this test's own accommodation for the confirmed-still-present race — added
+ * back after removing them once looked like it might be safe, and then wasn't (see git history).
  */
 
 // Local date components, NOT `.toISOString()` — see the identical fix + explanation in
@@ -69,23 +79,26 @@ test.describe('Daily Journal', () => {
     await page.click('.view-mode-btn[data-mode="day"]');
     await page.click('.nav-btn[data-view="notes"]');
     await expect(page.locator('.note-sheet-tab[data-id="daily_journal"]')).toHaveClass(/active/);
+    // Let the setup navigation's own (empty-content) flush calls settle before typing — see the
+    // file header. Without this, one of them can resolve AFTER the real content below is saved
+    // and silently overwrite it with empty content.
+    await page.waitForTimeout(1000);
 
     await page.fill('#weeklyNotesTextarea', 'Day A journal entry');
     await page.locator('#weeklyNotesTextarea').blur();
     await expect(page.locator('#notesSavedStatus')).toBeVisible();
-    // See the file header: the save this just triggered isn't awaited by the app itself — give it
-    // a moment to actually reach the server before navigating away (Finding 06).
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(1000);
 
     // Jump to Day B via the date picker — still in Day view, still on the Daily Journal tab.
     await page.fill('#weekDatePicker', isoDate(dayB));
     await expect(page.locator('#weeklyNotesTextarea')).not.toHaveValue('Day A journal entry');
     await expect(page.locator('#weeklyNotesTextarea')).toHaveValue('');
+    await page.waitForTimeout(1000);
 
     await page.fill('#weeklyNotesTextarea', 'Day B journal entry');
     await page.locator('#weeklyNotesTextarea').blur();
     await expect(page.locator('#notesSavedStatus')).toBeVisible();
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(1000);
 
     // Back to Day A: still isolated, not overwritten by Day B's edit.
     await page.fill('#weekDatePicker', isoDate(dayA));
