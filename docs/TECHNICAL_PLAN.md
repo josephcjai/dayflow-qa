@@ -177,6 +177,13 @@ response lands. New **Finding 09**: `saveNotes` never throws (returns `false`), 
 `flushCurrentNoteEditor`'s catch is unreachable — a failed save reads "Saved" and is never
 retried. See [reports/2026-09-20-qa-retest-2.md](../reports/2026-09-20-qa-retest-2.md).
 
+**UPDATE 2026-09-20 (fifth retest, commit `74dda2b`; `DAYFLOW_PINNED_REF` is a SHA again because
+the dev team's named target `v2.4.1` has not been tagged):** **Finding 12 fixed** and verified
+against reload-during-outage, two-failed-weeks, recover-then-reload and per-user-storage edge
+cases; its expected-failure marker flipped and is now a normal test, plus a new persistence guard.
+No new findings — findings 06–12 (the notes-saving saga) are all closed. See
+[reports/2026-09-20-qa-retest-5.md](../reports/2026-09-20-qa-retest-5.md).
+
 **UPDATE 2026-09-20 (fourth retest, tag `v2.4.0` = `91a595c`; `DAYFLOW_PINNED_REF` now holds the
 tag name):** the dev team finally cut `v2.4.0`, after this had been raised nine times — the pin is
 a name again, not a SHA. Findings **06, 10, 11 fixed** and verified (15/15 zero-wait loop clean;

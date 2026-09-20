@@ -28,6 +28,11 @@ import { registerAndLoginViaUI } from './fixtures.js';
  * different week's), so a note whose save failed while the user left that week is never re-sent
  * once connectivity returns, while the status pill reads "Saved".
  *
+ * UPDATE 2026-09-20 (74dda2b): Finding 12 is FIXED (per-week failed-save set, persisted to
+ * localStorage, retried on every flush and on launch) — its marker flipped ("Expected to fail, but
+ * passed") and is now a normal test. A new test guards the persistence half of that fix: an edit
+ * whose save failed survives a page RELOAD during the outage and is sent once the server recovers.
+ *
  * Finding 06's residual (rapid Notes-tab-then-type edits being clobbered by a late GET response)
  * is deliberately NOT encoded as a test here: it's timing-dependent (~58% in a 12-run diagnostic),
  * so a test.fail would itself flake by occasionally passing. See the 2026-09-20 retest report and
@@ -97,7 +102,7 @@ test.describe('notes save behavior', () => {
     await expect(page.locator('#weeklyNotesTextarea')).toHaveValue('', { timeout: 3000 });
   });
 
-  test.fail('a note whose save failed is re-sent after the user left that day and the server recovered (Finding 12)', async ({
+  test('a note whose save failed is re-sent after the user left that day and the server recovered (Finding 12, fixed in 74dda2b)', async ({
     page,
   }) => {
     await registerAndLoginViaUI(page);
@@ -132,5 +137,41 @@ test.describe('notes save behavior', () => {
     await page.click('.view-mode-btn[data-mode="day"]');
     await page.click('.nav-btn[data-view="notes"]');
     await expect(page.locator('#weeklyNotesTextarea')).toHaveValue('ONLY FOR DAY A', { timeout: 3000 });
+  });
+
+  test('a note whose save failed survives a reload during the outage and is sent after recovery (Finding 12 persistence)', async ({
+    page,
+  }) => {
+    await registerAndLoginViaUI(page);
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const dayA = new Date();
+    dayA.setDate(dayA.getDate() + 8);
+    const dayB = new Date();
+    dayB.setDate(dayB.getDate() + 15);
+
+    await page.fill('#weekDatePicker', iso(dayA));
+    await page.click('.view-mode-btn[data-mode="day"]');
+    await page.click('.nav-btn[data-view="notes"]');
+    await page.waitForTimeout(700);
+
+    await page.route('**/api/todos/notes', (route) => route.fulfill({ status: 500, body: '{"error":"boom"}' }));
+    await page.fill('#weeklyNotesTextarea', 'SURVIVES THE OUTAGE');
+    await page.locator('#weeklyNotesTextarea').blur();
+    await page.waitForTimeout(500);
+
+    await page.reload(); // still failing after the reload
+    await page.waitForTimeout(1000);
+    await page.unroute('**/api/todos/notes'); // server recovers
+    await page.fill('#weekDatePicker', iso(dayB));
+    await page.click('#nextWeekBtn');
+    await page.waitForTimeout(1200);
+
+    await page.reload();
+    await page.waitForTimeout(800);
+    await page.fill('#weekDatePicker', iso(dayA));
+    await page.click('.view-mode-btn[data-mode="day"]');
+    await page.click('.nav-btn[data-view="notes"]');
+    await expect(page.locator('#weeklyNotesTextarea')).toHaveValue('SURVIVES THE OUTAGE', { timeout: 3000 });
   });
 });
