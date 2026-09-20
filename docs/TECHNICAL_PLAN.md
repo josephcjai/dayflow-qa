@@ -17,7 +17,7 @@ a large "production hardening" push (Helmet, CORS, a decoupled migration script,
 proxy config, graceful shutdown, error-message masking), a new date-specific Daily Journal note
 sheet, and as of this round the Finding 06/07 fixes plus a Month-view prefetch perf fix — with no
 new tag cut for any of them yet, despite the dev team's own 2026-09-20 reply saying "Tag `v2.4.0`
-is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`432ce86`);
+is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`7dfa287`);
 `checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
 `git clone --branch` doesn't accept one. Same suggestion as before, now asked **seven** times: a
 tag for this point would let the pin be a name again instead of a SHA — the dev team has now
@@ -167,6 +167,15 @@ server/.env.example}` — Compose's own required-variable syntax. Verified direc
 reading the diff: ran `docker compose -f docker-compose.prod.yml config` with `JWT_SECRET` unset —
 refuses with `required variable JWT_SECRET is missing a value: ...`; with it set, interpolates
 clean. Closed.
+
+**UPDATE 2026-09-20 (second retest, commit `7dfa287`; pin now `7dfa287`):** Finding 08 — **fixed**
+(0 saves on 6 nav clicks). Finding 06 — **still not resolved**, and the diagnosis above was
+incomplete: write ordering is now fixed (per-week queue), but the residual loss (7/12 zero-wait
+runs) is a *read-clobbers-local-edit* race — `syncWeekDataWithApi` (3 sequential GETs)
+unconditionally assigns `weekData.noteSheets` from the server, replacing text typed before the
+response lands. New **Finding 09**: `saveNotes` never throws (returns `false`), so
+`flushCurrentNoteEditor`'s catch is unreachable — a failed save reads "Saved" and is never
+retried. See [reports/2026-09-20-qa-retest-2.md](../reports/2026-09-20-qa-retest-2.md).
 
 **Finding 08 (new), identified 2026-09-20 — a real performance regression introduced BY the
 Finding 06 fix, confirmed live with a network-trace diagnostic.** `flushCurrentNoteEditor()` has no

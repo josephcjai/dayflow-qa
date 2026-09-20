@@ -18,25 +18,23 @@ import { registerAndLoginViaUI } from './fixtures.js';
  * Only the day-switching mechanics are covered here; `e2e/note-sheets.spec.ts` covers the tab's
  * mere presence among the 5 defaults.
  *
- * UPDATE 2026-09-20 — commit 432ce86's fix for Finding 06 is real but PARTIAL, confirmed by a
- * live network-log diagnostic, not just re-running this file until it passed:
+ * UPDATE 2026-09-20 (retest of commit 7dfa287) — READ THIS BEFORE REMOVING THE WAITS BELOW.
  *
- * `flushCurrentNoteEditor`/`flushNotesToApi` are now genuinely `async` and awaited by their own
- * caller before that caller changes STATE — that part of the original race is closed. But nearly
- * every UI action that touches notes (the date picker, the view-mode buttons, the notes nav tab,
- * blur) fires its OWN independent `flushCurrentNoteEditor()` call, each with its own `fetch`. A
- * diagnostic script logging every `/api/todos/notes` request/response confirmed that switching to
- * Day view + clicking the Notes tab BEFORE typing anything each fire their own (empty-content)
- * save, and typing + blurring fires yet another (real-content) save — three-plus independent,
- * unsequenced requests in quick succession. Nothing stops an EARLIER-fired-but-LATER-resolving
- * empty save from completing after a real one and overwriting it — awaiting inside one handler
- * doesn't order that handler's request relative to a DIFFERENT handler's already-in-flight one.
- * Reproduced at roughly the same ~30% rate as before the fix, across 10 repeated runs. This is
- * reported as Finding 06 being genuinely narrowed (the specific unawaited-call-before-navigation
- * bug is real and fixed) but NOT closed — see the 2026-09-20 report for the full account.
- *
- * The waits below are this test's own accommodation for the confirmed-still-present race — added
- * back after removing them once looked like it might be safe, and then wasn't (see git history).
+ * Dev added a dirty check and a per-week serialized save queue (`notesSaveChains` in
+ * apiClient.js). The write side is now genuinely ordered — a request trace shows each POST
+ * response landing before the next POST fires. But a 12-iteration, zero-wait diagnostic still lost
+ * "Day A" in 7 of 12 runs, and the trace shows a DIFFERENT mechanism than the one QA's earlier
+ * 2026-09-20 report blamed (write ordering): the notes POST for week A went out with EMPTY content
+ * (`hasA=false`) in the failing runs. Cause: clicking the Notes tab / Day view kicks off
+ * `syncWeekDataWithApi`, which awaits THREE sequential GETs (slots, habits, todos+notes) and then
+ * does `weekData.noteSheets = apiTodosNotes.noteSheets` unconditionally — with no check for an
+ * unsaved local edit. If the user (or Playwright) types before that late response lands, the
+ * response silently replaces the freshly-typed text with the server's empty copy, and the next
+ * flush faithfully saves the empty copy. So it is a read-clobbers-local-edit race, not (only) a
+ * write-ordering race. The window is three round trips wide, so it gets WORSE on a real network,
+ * not better. The explicit waits below (let the setup navigation's sync settle before typing) are
+ * what keep this test deterministic; they are accommodating a real app race, not test sloppiness.
+ * Reported as Finding 06 (residual) in reports/2026-09-20-qa-retest-2.md.
  */
 
 // Local date components, NOT `.toISOString()` — see the identical fix + explanation in
@@ -79,9 +77,8 @@ test.describe('Daily Journal', () => {
     await page.click('.view-mode-btn[data-mode="day"]');
     await page.click('.nav-btn[data-view="notes"]');
     await expect(page.locator('.note-sheet-tab[data-id="daily_journal"]')).toHaveClass(/active/);
-    // Let the setup navigation's own (empty-content) flush calls settle before typing — see the
-    // file header. Without this, one of them can resolve AFTER the real content below is saved
-    // and silently overwrite it with empty content.
+    // Let the setup navigation's own sync GETs land before typing — see the file header. Without
+    // this, a late GET response can replace the text typed below with the server's empty copy.
     await page.waitForTimeout(1000);
 
     await page.fill('#weeklyNotesTextarea', 'Day A journal entry');

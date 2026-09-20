@@ -33,6 +33,9 @@ or renaming a test).
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
 suggestions for whatever the suite turned up on a given run.
 
+- [2026-09-20-qa-retest-2.md](reports/2026-09-20-qa-retest-2.md) — second retest: **Finding 08
+  confirmed fixed**, **Finding 06 still not resolved** (root cause corrected: a late sync GET
+  overwrites unsaved edits), **1 new finding** (failed notes saves read "Saved"), 116/116 checks.
 - [2026-09-20-qa-retest.md](reports/2026-09-20-qa-retest.md) — retest against the dev team's fix:
   **Finding 07 confirmed resolved**, **Finding 06 only partially resolved** (narrowed, not closed —
   confirmed by a live network-trace diagnostic), plus **1 new finding** (a performance regression
