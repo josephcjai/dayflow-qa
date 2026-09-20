@@ -17,7 +17,7 @@ a large "production hardening" push (Helmet, CORS, a decoupled migration script,
 proxy config, graceful shutdown, error-message masking), a new date-specific Daily Journal note
 sheet, and as of this round the Finding 06/07 fixes plus a Month-view prefetch perf fix — with no
 new tag cut for any of them yet, despite the dev team's own 2026-09-20 reply saying "Tag `v2.4.0`
-is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`7dfa287`);
+is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`63498c7`);
 `checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
 `git clone --branch` doesn't accept one. Same suggestion as before, now asked **seven** times: a
 tag for this point would let the pin be a name again instead of a SHA — the dev team has now
@@ -176,6 +176,15 @@ unconditionally assigns `weekData.noteSheets` from the server, replacing text ty
 response lands. New **Finding 09**: `saveNotes` never throws (returns `false`), so
 `flushCurrentNoteEditor`'s catch is unreachable — a failed save reads "Saved" and is never
 retried. See [reports/2026-09-20-qa-retest-2.md](../reports/2026-09-20-qa-retest-2.md).
+
+**UPDATE 2026-09-20 (third retest, commit `63498c7`; pin now `63498c7`):** Finding 09 — **fixed**.
+Finding 06 — much improved (zero-wait loss 7/12 → 1/15) but the fix introduced **Finding 10**
+(global `STATE.isNotesDirty` suppresses sync/render for *any* week while set, held through every
+in-flight save and forever after a failure — a failed save on day A leaves A's text in day B's
+editor and later saves it there) and **Finding 11** (regression: `note-sheets.spec.ts`'s
+custom-sheet test now fails first-attempt ~50%, showing the journal sheet's text on the custom
+sheet after reload). Finding 10 is an expected-failure test in `e2e/notes-save-behavior.spec.ts`.
+See [reports/2026-09-20-qa-retest-3.md](../reports/2026-09-20-qa-retest-3.md).
 
 **Finding 08 (new), identified 2026-09-20 — a real performance regression introduced BY the
 Finding 06 fix, confirmed live with a network-trace diagnostic.** `flushCurrentNoteEditor()` has no
