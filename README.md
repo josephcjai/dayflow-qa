@@ -33,6 +33,10 @@ or renaming a test).
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
 suggestions for whatever the suite turned up on a given run.
 
+- [2026-09-20-qa-retest-4.md](reports/2026-09-20-qa-retest-4.md) — fourth retest against the new
+  **`v2.4.0` tag**: Findings **06, 10, 11 confirmed fixed**, waits removed from the daily-journal
+  test, **1 new narrower finding** (12: a failed note save is dropped if you leave that day before
+  the server recovers); 118/118 checks, no flakes.
 - [2026-09-20-qa-retest-3.md](reports/2026-09-20-qa-retest-3.md) — third retest: **Finding 09
   fixed**, Finding 06 much improved (7/12 → 1/15), but the fixes introduced **2 new data-corruption
   findings** (10, 11: notes land in the wrong day/sheet); 117 checks, 1 first-attempt flake.

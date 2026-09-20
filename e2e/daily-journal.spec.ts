@@ -18,7 +18,11 @@ import { registerAndLoginViaUI } from './fixtures.js';
  * Only the day-switching mechanics are covered here; `e2e/note-sheets.spec.ts` covers the tab's
  * mere presence among the 5 defaults.
  *
- * UPDATE 2026-09-20 (retest of commit 7dfa287) — READ THIS BEFORE REMOVING THE WAITS BELOW.
+ * UPDATE 2026-09-20 (v2.4.0 / 91a595c): the explicit waits this test needed for the last several
+ * rounds have been REMOVED — dev's context-scoped fix closed the race (0/15 zero-wait losses in a
+ * dedicated loop). The history below explains why they existed.
+ *
+ * HISTORY (retest of commit 7dfa287):
  *
  * Dev added a dirty check and a per-week serialized save queue (`notesSaveChains` in
  * apiClient.js). The write side is now genuinely ordered — a request trace shows each POST
@@ -77,25 +81,19 @@ test.describe('Daily Journal', () => {
     await page.click('.view-mode-btn[data-mode="day"]');
     await page.click('.nav-btn[data-view="notes"]');
     await expect(page.locator('.note-sheet-tab[data-id="daily_journal"]')).toHaveClass(/active/);
-    // Let the setup navigation's own sync GETs land before typing — see the file header. Without
-    // this, a late GET response can replace the text typed below with the server's empty copy.
-    await page.waitForTimeout(1000);
 
     await page.fill('#weeklyNotesTextarea', 'Day A journal entry');
     await page.locator('#weeklyNotesTextarea').blur();
     await expect(page.locator('#notesSavedStatus')).toBeVisible();
-    await page.waitForTimeout(1000);
 
     // Jump to Day B via the date picker — still in Day view, still on the Daily Journal tab.
     await page.fill('#weekDatePicker', isoDate(dayB));
     await expect(page.locator('#weeklyNotesTextarea')).not.toHaveValue('Day A journal entry');
     await expect(page.locator('#weeklyNotesTextarea')).toHaveValue('');
-    await page.waitForTimeout(1000);
 
     await page.fill('#weeklyNotesTextarea', 'Day B journal entry');
     await page.locator('#weeklyNotesTextarea').blur();
     await expect(page.locator('#notesSavedStatus')).toBeVisible();
-    await page.waitForTimeout(1000);
 
     // Back to Day A: still isolated, not overwritten by Day B's edit.
     await page.fill('#weekDatePicker', isoDate(dayA));

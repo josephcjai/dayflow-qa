@@ -19,9 +19,9 @@ sheet, and as of this round the Finding 06/07 fixes plus a Month-view prefetch p
 new tag cut for any of them yet, despite the dev team's own 2026-09-20 reply saying "Tag `v2.4.0`
 is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`63498c7`);
 `checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
-`git clone --branch` doesn't accept one. Same suggestion as before, now asked **seven** times: a
-tag for this point would let the pin be a name again instead of a SHA — the dev team has now
-agreed it's warranted twice without one actually landing.
+`git clone --branch` doesn't accept one. **Resolved 2026-09-20:** after being asked nine times, the
+dev team cut tag `v2.4.0` (= `91a595c`); `DAYFLOW_PINNED_REF` now holds `v2.4.0` and the SHA-fetch
+path in `checkout-dev-ref.mjs` remains available for any future untagged pin.
 
 **CI automation removed (2026-09-02) — run these by hand instead.** A GitHub Actions workflow
 existed here (checkout pinned ref → stack up → `test:api`/`test:e2e` → teardown, plus
@@ -177,7 +177,17 @@ response lands. New **Finding 09**: `saveNotes` never throws (returns `false`), 
 `flushCurrentNoteEditor`'s catch is unreachable — a failed save reads "Saved" and is never
 retried. See [reports/2026-09-20-qa-retest-2.md](../reports/2026-09-20-qa-retest-2.md).
 
-**UPDATE 2026-09-20 (third retest, commit `63498c7`; pin now `63498c7`):** Finding 09 — **fixed**.
+**UPDATE 2026-09-20 (fourth retest, tag `v2.4.0` = `91a595c`; `DAYFLOW_PINNED_REF` now holds the
+tag name):** the dev team finally cut `v2.4.0`, after this had been raised nine times — the pin is
+a name again, not a SHA. Findings **06, 10, 11 fixed** and verified (15/15 zero-wait loop clean;
+`note-sheets` custom-sheet test 8/8 with retries off; `daily-journal` waits removed, 8/8 stable).
+New narrower **Finding 12**: the failed-save marker is per-week but the retry always saves the
+*current* week and any success clears it, so a note whose save failed is never re-sent if the user
+leaves that day before the server recovers (status reads "Saved"; note gone after reload).
+Expected-failure test in `e2e/notes-save-behavior.spec.ts`. See
+[reports/2026-09-20-qa-retest-4.md](../reports/2026-09-20-qa-retest-4.md).
+
+**UPDATE 2026-09-20 (third retest, commit `63498c7`; pin then `63498c7`):** Finding 09 — **fixed**.
 Finding 06 — much improved (zero-wait loss 7/12 → 1/15) but the fix introduced **Finding 10**
 (global `STATE.isNotesDirty` suppresses sync/render for *any* week while set, held through every
 in-flight save and forever after a failure — a failed save on day A leaves A's text in day B's

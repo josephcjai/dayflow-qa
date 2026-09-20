@@ -22,6 +22,12 @@ import { registerAndLoginViaUI } from './fixtures.js';
  * a failure, and both syncWeekDataWithApi and renderNotes skip updating while it is set — so after a
  * failed save on day A, navigating to day B leaves A's text in B's editor, later saved onto B.
  *
+ * UPDATE 2026-09-20 (v2.4.0 / 91a595c): Findings 10 and 11 are FIXED (context-scoped rendering);
+ * the Finding 10 test above is now a normal test. The last test is a new expected-failure marker
+ * for Finding 12: the failed-save retry marker is cleared by ANY successful save (including a
+ * different week's), so a note whose save failed while the user left that week is never re-sent
+ * once connectivity returns, while the status pill reads "Saved".
+ *
  * Finding 06's residual (rapid Notes-tab-then-type edits being clobbered by a late GET response)
  * is deliberately NOT encoded as a test here: it's timing-dependent (~58% in a 12-run diagnostic),
  * so a test.fail would itself flake by occasionally passing. See the 2026-09-20 retest report and
@@ -66,7 +72,7 @@ test.describe('notes save behavior', () => {
     await expect(page.locator('#notesSavedStatus')).toHaveText('Save failed', { timeout: 3000 });
   });
 
-  test.fail('after a failed save on one day, the next day editor does not inherit that text (Finding 10)', async ({
+  test('after a failed save on one day, the next day editor does not inherit that text (Finding 10, fixed in v2.4.0)', async ({
     page,
   }) => {
     await registerAndLoginViaUI(page);
@@ -89,5 +95,42 @@ test.describe('notes save behavior', () => {
 
     await page.fill('#weekDatePicker', iso(dayB));
     await expect(page.locator('#weeklyNotesTextarea')).toHaveValue('', { timeout: 3000 });
+  });
+
+  test.fail('a note whose save failed is re-sent after the user left that day and the server recovered (Finding 12)', async ({
+    page,
+  }) => {
+    await registerAndLoginViaUI(page);
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const dayA = new Date();
+    dayA.setDate(dayA.getDate() + 8);
+    const dayB = new Date();
+    dayB.setDate(dayB.getDate() + 15);
+
+    await page.fill('#weekDatePicker', iso(dayA));
+    await page.click('.view-mode-btn[data-mode="day"]');
+    await page.click('.nav-btn[data-view="notes"]');
+    await page.waitForTimeout(1000);
+
+    await page.route('**/api/todos/notes', (route) => route.fulfill({ status: 500, body: '{"error":"boom"}' }));
+    await page.fill('#weeklyNotesTextarea', 'ONLY FOR DAY A');
+    await page.locator('#weeklyNotesTextarea').blur();
+    await page.waitForTimeout(600);
+
+    await page.fill('#weekDatePicker', iso(dayB)); // leave day A while the server is failing
+    await page.waitForTimeout(600);
+    await page.unroute('**/api/todos/notes'); // server recovers
+    await page.fill('#weekDatePicker', iso(dayB)); // no-op re-pick; then navigate again
+    await page.click('#nextWeekBtn');
+    await page.waitForTimeout(1000);
+    await page.fill('#weekDatePicker', iso(dayA));
+    await page.waitForTimeout(800);
+
+    await page.reload();
+    await page.fill('#weekDatePicker', iso(dayA));
+    await page.click('.view-mode-btn[data-mode="day"]');
+    await page.click('.nav-btn[data-view="notes"]');
+    await expect(page.locator('#weeklyNotesTextarea')).toHaveValue('ONLY FOR DAY A', { timeout: 3000 });
   });
 });
