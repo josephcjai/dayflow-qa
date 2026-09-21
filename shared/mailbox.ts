@@ -9,7 +9,7 @@
  * (Side effect worth knowing: it also means a production deployment WITHOUT BREVO_API_KEY writes
  * live reset tokens to its logs — reported in the 2026-09-21 report.)
  */
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 export interface ResetLink {
   base: string; // everything before "#reset-password"
@@ -19,9 +19,9 @@ export interface ResetLink {
 }
 
 function allLogs(container: string): string {
-  // `docker logs` replays the container's stdout on our stdout and its stderr on ours; capture both.
-  const r = execFileSync('docker', ['logs', container], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-  return r;
+  // `docker logs` replays the container's stdout on our stdout and its stderr on our stderr; keep both.
+  const r = spawnSync('docker', ['logs', container], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return (r.stdout ?? '') + (r.stderr ?? '');
 }
 
 export function resetLinksFor(email: string, container = 'dayflow-qa-api'): ResetLink[] {

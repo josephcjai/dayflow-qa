@@ -1,65 +1,98 @@
 /**
- * Added 2026-09-21 for commit 8fbc404 (change/forgot/reset password). The parts that only show up
- * with NODE_ENV=production, against the api-qa-prodcheck container (healthy DB, APP_URL set to
- * https://dayflow-qa.example, BREVO_API_KEY unset — like a deployment that hasn't wired email yet).
- * See docker-compose.prodcheck.yml and the regular api/15-password-management.spec.ts.
+ * Added 2026-09-21 for commit 8fbc404 (change/forgot/reset password), re-tested against 0563993.
+ * The parts that only show up with NODE_ENV=production, against the api-qa-prodcheck* containers
+ * (docker-compose.prodcheck.yml): api-qa-prodcheck = healthy DB, APP_URL set, BREVO_API_KEY unset
+ * (a deployment that hasn't wired email yet); -baddb = wrong DB password; -noappurl = APP_URL omitted.
  *
  * Deliberately NOT tested: forgot-password with a real/fake BREVO_API_KEY — the API would POST the
- * recipient's address to api.brevo.com, and QA does not send data to third parties. The code path
- * (provider failure is swallowed, generic 200 returned) is source-reviewed only.
+ * recipient's address to api.brevo.com, and QA does not send data to third parties. That path
+ * (provider call, async dispatch, provider-failure handling) is source-reviewed only, so the
+ * production-mode *timing* of forgot-password with mail configured is also not measured here.
  */
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { ApiClient } from '../shared/apiClient.js';
 import { registerTestUser } from '../shared/testUser.js';
-import { waitForResetLink } from '../shared/mailbox.js';
+import { signQaJwt } from '../shared/jwt.js';
 
-const BASE = `http://localhost:${process.env.QA_API_PRODCHECK_PORT || '5101'}/api`;
-const CONTAINER = 'dayflow-qa-api-prodcheck';
-const api = new ApiClient(BASE);
+const PORT = process.env.QA_API_PRODCHECK_PORT || '5101';
+const BAD_PORT = process.env.QA_API_PRODCHECK_BADDB_PORT || '5102';
+const api = new ApiClient(`http://localhost:${PORT}/api`);
+const badDb = new ApiClient(`http://localhost:${BAD_PORT}/api`);
+const OK = 'dayflow-qa-api-prodcheck';
+
+/** stdout AND stderr — `docker logs` replays a container's stderr on ours (Node's fatal errors and console.warn/error live there). */
+function docker(...args: string[]): string {
+  const r = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return (r.stdout ?? '') + (r.stderr ?? '');
+}
 
 describe('password management under NODE_ENV=production', () => {
-  it('with APP_URL set, the reset link uses it and ignores an attacker-supplied Origin/Referer', async () => {
-    const u = await registerTestUser(api);
-    const forged = await api.post('/auth/forgot-password', { email: u.email }, {
-      Origin: 'http://evil.example',
-      Referer: 'http://evil2.example/x',
-    });
-    expect(forged.status).toBe(200);
-    const link = await waitForResetLink(u.email, { container: CONTAINER });
-    expect(link.base).toBe('https://dayflow-qa.example/');
-    expect(link.url).not.toMatch(/evil/);
+  it('refuses to boot without APP_URL: the container exits at once with a FATAL message (Finding 14, fixed in 0563993)', () => {
+    const status = docker('inspect', '-f', '{{.State.Status}}|{{.State.ExitCode}}', 'dayflow-qa-api-prodcheck-noappurl').trim();
+    const [state, code] = status.split('|');
+    expect(state).toBe('exited');
+    expect(Number(code)).not.toBe(0);
+    expect(docker('logs', 'dayflow-qa-api-prodcheck-noappurl')).toMatch(/APP_URL environment variable must be set in production/);
   });
 
-  it('a non-string reset token is still a 500 in production, but the message is masked (no internals leaked)', async () => {
+  it('with no mail provider configured, forgot-password is a 503 for existing AND unknown emails alike, and nothing secret is logged (Finding 20, fixed in 0563993)', async () => {
     const u = await registerTestUser(api);
-    const res = await api.post('/auth/reset-password', { email: u.email, token: 12345, newPassword: 'BrandNewPassw0rd!' });
-    // Still a server error (Finding 16 — should be 400), but never "token.trim is not a function".
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe('Internal server error');
+    const existing = await api.post('/auth/forgot-password', { email: u.email });
+    const unknown = await api.post('/auth/forgot-password', { email: `nobody-${Date.now()}@dayflow-qa.test` });
+    expect(existing.status).toBe(503);
+    expect(unknown.status).toBe(503);
+    expect(unknown.body).toEqual(existing.body); // no enumeration through the failure mode either
+    // invalid input is still a 400 (validation runs before the availability check)
+    expect((await api.post('/auth/forgot-password', { email: '' })).status).toBe(400);
+
+    const logs = docker('logs', OK);
+    const leaked = logs.split(/\r?\n/).some((l) => l.includes('#reset-password?token=') || l.includes(encodeURIComponent(u.email)) || l.includes('Text Content'));
+    expect(leaked).toBe(false);
   });
 
-  it('a wrong current password and a bad reset token keep their specific 400 messages in production (not masked)', async () => {
+  it('non-string inputs are now 400 in production (were a masked 500), and specific 400 messages still pass through', async () => {
     const u = await registerTestUser(api);
+    const badToken = await api.post('/auth/reset-password', { email: u.email, token: 12345, newPassword: 'BrandNewPassw0rd!' });
+    expect(badToken.status).toBe(400);
     const wrong = await u.client.post('/auth/change-password', { currentPassword: 'nope-nope', newPassword: 'BrandNewPassw0rd!' });
     expect(wrong.status).toBe(400);
     expect(wrong.body.error).toMatch(/incorrect/i);
     const bad = await api.post('/auth/reset-password', { email: u.email, token: 'f'.repeat(64), newPassword: 'BrandNewPassw0rd!' });
     expect(bad.status).toBe(400);
-    expect(bad.body.error).toMatch(/invalid or has already been used/i);
   });
 
-  // Finding 20 — with BREVO_API_KEY unset, EmailService "simulates" sending by logging the whole
-  // message, reset link and live token included, at every NODE_ENV — production too — while the
-  // endpoint still tells the user a link "has been dispatched".
-  it.fails('a production deployment never writes a live reset token to its logs (Finding 20)', async () => {
+  it('change-password still works in production with no mail provider (the "password changed" notice is best-effort), and revokes the old session', async () => {
     const u = await registerTestUser(api);
-    const forgot = await api.post('/auth/forgot-password', { email: u.email });
-    expect(forgot.status).toBe(200);
-    const logs = execFileSync('docker', ['logs', CONTAINER], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-    const leaked = logs
-      .split(/\r?\n/)
-      .some((line) => line.includes("#reset-password?token=") && line.includes(encodeURIComponent(u.email)));
-    expect(leaked).toBe(false);
+    const res = await u.client.post('/auth/change-password', { currentPassword: u.password, newPassword: 'BrandNewPassw0rd!' });
+    expect(res.status).toBe(200);
+    expect((await api.as(u.token).get('/auth/me')).status).toBe(401);
+    expect((await api.as(res.body.token).get('/auth/me')).status).toBe(200);
+  });
+
+  it('registration and login carry hasPassword in production too', async () => {
+    const u = await registerTestUser(api);
+    const login = await api.post('/auth/login', { email: u.email, password: u.password });
+    expect(login.body.user.hasPassword).toBe(true);
+  });
+
+  // Finding 24 — the session-version check fails OPEN when its DB lookup errors. With the DB
+  // unreachable (-baddb), a token that was REVOKED (its password was changed on the healthy
+  // container) should still be refused; instead the middleware swallows the lookup error, accepts
+  // it at version 1, and the request reaches the route (which then 500s).
+  it.fails('a revoked session token is still refused when the version lookup cannot reach the DB — fail closed (Finding 24)', async () => {
+    const u = await registerTestUser(api);
+    const revoked = u.token; // version 1
+    const change = await u.client.post('/auth/change-password', { currentPassword: u.password, newPassword: 'BrandNewPassw0rd!' });
+    expect(change.status).toBe(200);
+    const res = await badDb.as(revoked).get('/todos/week/2026-09-07');
+    expect([401, 503]).toContain(res.status); // today: 500 — the middleware let it through to the route
+  });
+
+  it('with the DB down, a token for a user version the middleware cannot verify still cannot read data (route fails, nothing fabricated)', async () => {
+    const t = signQaJwt({ userId: '00000000-0000-0000-0000-000000000000', email: 'x@dayflow-qa.test', tokenVersion: 1 });
+    const res = await badDb.as(t).get('/todos/week/2026-09-07');
+    expect(res.status).toBeGreaterThanOrEqual(401);
+    expect(JSON.stringify(res.body)).not.toMatch(/password authentication failed|ECONNREFUSED|pg_hba/i);
   });
 });

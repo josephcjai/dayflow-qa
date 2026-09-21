@@ -33,6 +33,11 @@ or renaming a test).
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
 suggestions for whatever the suite turned up on a given run.
 
+- [2026-09-21-qa-password-management-retest.md](reports/2026-09-21-qa-password-management-retest.md)
+  — retest of dev's fixes (`0563993`): the **blocking defects (13, 14, 15, 16, 20, 21, 22) are fixed
+  and verified**; **17 (timing) and 18 (docs) are not resolved, 19 only partly**; **2 new lower-severity
+  findings** (23 displayName validation, 24 session check fails open); 160 checks + 6 known-defect
+  markers, prod-mode 13/13.
 - [2026-09-21-qa-password-management.md](reports/2026-09-21-qa-password-management.md) — strict
   pre-production review of change/forgot/reset password (commit `8fbc404`): **verdict — not ready to
   deploy as-is**; **10 new findings** incl. reset-link poisoning via Origin/Referer (14), a missing

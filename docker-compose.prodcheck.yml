@@ -44,6 +44,7 @@ services:
     environment:
       PORT: 5000
       NODE_ENV: production
+      APP_URL: https://dayflow-qa.example # required in production as of 0563993 (fail-fast)
       JWT_SECRET: ${JWT_SECRET:-qa-test-only-secret-do-not-use-in-prod}
       ALLOWED_ORIGINS: ${QA_WEB_ORIGIN:-http://dayflow-qa.local:8280}
       DB_HOST: postgres-qa
@@ -54,3 +55,20 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-123456789-qa-fake-client-id.apps.googleusercontent.com}
     ports:
       - "${QA_API_PRODCHECK_BADDB_PORT:-5102}:5000"
+
+  # 2026-09-21 (0563993): production must REFUSE to boot without APP_URL (Finding 14 fix). This
+  # container deliberately omits it and is expected to exit immediately with the FATAL message;
+  # prodcheck/16 asserts exactly that. restart: "no" so it stays exited instead of crash-looping.
+  api-qa-prodcheck-noappurl:
+    image: dayflow-qa-api-qa:latest
+    container_name: dayflow-qa-api-prodcheck-noappurl
+    restart: "no"
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:-qa-test-only-secret-do-not-use-in-prod}
+      DB_HOST: postgres-qa
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-dayflow_qa}
+      DB_USER: ${DB_USER:-dayflow_qa}
+      DB_PASSWORD: ${DB_PASSWORD:-dayflow_qa_test_only}

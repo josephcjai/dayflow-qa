@@ -17,8 +17,22 @@ const schema = readFileSync(path.join(checkout, 'server/src/db/schema.sql'), 'ut
 const tables = (t) => new Set([...t.matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z_]+)/gi)].map((m) => m[1].toLowerCase()));
 const inMigrate = tables(migrate), inSchema = tables(schema);
 const missing = [...inMigrate].filter((t) => !inSchema.has(t));
-if (missing.length) {
-  console.error(`❌ schema.sql is missing table(s) that migrate.ts creates: ${missing.join(', ')}`);
+
+// Columns too (added 2026-09-21 — token_version was added to BOTH, but the class of bug is the same):
+// every "ALTER TABLE t ADD COLUMN IF NOT EXISTS c" in migrate.ts must have column c declared in
+// schema.sql's CREATE TABLE t.
+const tableBody = (sql, t) => {
+  const m = new RegExp('CREATE TABLE(?: IF NOT EXISTS)?\\s+' + t + '\\s*\\(([\\s\\S]*?)\\n\\);', 'i').exec(sql);
+  return m ? m[1].toLowerCase() : '';
+};
+const missingCols = [...migrate.matchAll(/ALTER TABLE\s+([a-z_]+)\s+ADD COLUMN IF NOT EXISTS\s+([a-z_]+)/gi)]
+  .map((m) => [m[1].toLowerCase(), m[2].toLowerCase()])
+  .filter(([t, c]) => !new RegExp('(^|\\s)' + c + '\\s', 'm').test(tableBody(schema, t)))
+  .map(([t, c]) => t + '.' + c);
+
+if (missing.length || missingCols.length) {
+  if (missing.length) console.error('❌ schema.sql is missing table(s) that migrate.ts creates: ' + missing.join(', '));
+  if (missingCols.length) console.error('❌ schema.sql is missing column(s) that migrate.ts adds: ' + missingCols.join(', '));
   process.exit(1);
 }
-console.log(`✅ schema.sql contains all ${inMigrate.size} tables migrate.ts creates.`);
+console.log('✅ schema.sql contains all ' + inMigrate.size + ' tables (and every added column) migrate.ts creates.');

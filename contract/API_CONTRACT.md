@@ -97,7 +97,9 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
     "user": {
       "id": "e4f8b6b1-0987-4321-abcd-123456789abc",
       "email": "user@example.com",
-      "displayName": "User Name"
+      "displayName": "User Name",
+      "avatarUrl": "https://lh3.googleusercontent.com/...",
+      "hasPassword": true
     }
   }
   ```
@@ -136,7 +138,8 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
       "id": "e4f8b6b1-0987-4321-abcd-123456789abc",
       "email": "user@gmail.com",
       "displayName": "User Name",
-      "avatarUrl": "https://lh3.googleusercontent.com/a/..."
+      "avatarUrl": "https://lh3.googleusercontent.com/a/...",
+      "hasPassword": false
     }
   }
   ```
@@ -162,12 +165,13 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
 - **Success Response (200 OK):**
   ```json
   {
-    "message": "Password updated successfully"
+    "message": "Password updated successfully",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6..."
   }
   ```
 - **Error Responses:**
-  - `400 Bad Request`: `{ "error": "Current password is incorrect" }` or validation errors
-  - `401 Unauthorized`: `{ "error": "Unauthorized" }`
+  - `400 Bad Request`: `{ "error": "Current password is incorrect" }` or validation errors (e.g. password length 6–72 chars)
+  - `401 Unauthorized`: `{ "error": "Unauthorized access. Authentication token required." }`
 
 ---
 
@@ -184,10 +188,10 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
 - **Success Response (200 OK):**
   ```json
   {
-    "message": "If an account exists with this email, password reset instructions have been dispatched."
+    "message": "If an account exists for this email address, a password reset link has been dispatched. Please check your inbox."
   }
   ```
-  *(Generic response prevents email enumeration attacks. If Brevo API is configured, an email with a secure 1-hour expiration link is dispatched. In local dev mode without Brevo credentials, the reset link is logged to server console).*
+  *(Generic response prevents email enumeration attacks. If Brevo API is configured, an email with a secure 1-hour expiration link is dispatched. In production, unconfigured email service returns 503 Service Unavailable. In local dev mode without Brevo credentials, the reset link is logged to server console).*
 
 ---
 
@@ -210,7 +214,10 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
   }
   ```
 - **Error Responses:**
-  - `400 Bad Request`: `{ "error": "Invalid or expired password reset link. Please request a new one." }`
+  - `400 Bad Request`:
+    - `{ "error": "Invalid or used password reset link. Please request a new one." }`
+    - `{ "error": "Password reset link has expired. Please request a new one." }`
+    - Validation errors (e.g. non-string inputs, password length 6–72 chars)
 
 ---
 

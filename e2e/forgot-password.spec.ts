@@ -148,8 +148,8 @@ test.describe('forgot / reset password (login screen)', () => {
     await expect(page.locator('#loginScreen img[src="x"]')).toHaveCount(0);
   });
 
-  // Finding 22 — the one-time token stays in the address bar / history after a successful reset
-  test.fail('after a successful reset the one-time token is no longer in the page URL (Finding 22)', async ({ page }) => {
+  // Finding 22 (fixed in 0563993) — the one-time token used to stay in the address bar / history
+  test('after a successful reset the one-time token is no longer in the page URL (Finding 22)', async ({ page }) => {
     await registerAndLoginViaUI(page);
     const email = (await page.evaluate(() => JSON.parse(localStorage.getItem('dayflow_user') || '{}').email)) as string;
     await logoutAndOpenLogin(page);
@@ -164,5 +164,6 @@ test.describe('forgot / reset password (login screen)', () => {
     await expect(page.locator('#landingResetStatusMsg')).toContainText(/reset successfully/i);
     await page.waitForTimeout(2600); // the app switches back to Sign In after ~2.2s
     expect(page.url()).not.toContain(link.token);
+    expect(page.url()).not.toContain('reset-password');
   });
 });
