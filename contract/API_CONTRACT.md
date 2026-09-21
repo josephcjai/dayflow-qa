@@ -147,6 +147,73 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
 
 ---
 
+### 1.6 Change Account Password (Authenticated)
+
+- **URL:** `POST /api/auth/change-password`
+- **Auth Required:** Yes (`Bearer <token>`)
+- **Request Body:**
+  ```json
+  {
+    "currentPassword": "currentPassword123",
+    "newPassword": "newSecurePassword456"
+  }
+  ```
+  *(Note: `currentPassword` is optional for OAuth-only users setting their first password)*
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "Password updated successfully"
+  }
+  ```
+- **Error Responses:**
+  - `400 Bad Request`: `{ "error": "Current password is incorrect" }` or validation errors
+  - `401 Unauthorized`: `{ "error": "Unauthorized" }`
+
+---
+
+### 1.7 Request Password Reset Email (Forgot Password)
+
+- **URL:** `POST /api/auth/forgot-password`
+- **Auth Required:** No
+- **Request Body:**
+  ```json
+  {
+    "email": "user@example.com"
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "If an account exists with this email, password reset instructions have been dispatched."
+  }
+  ```
+  *(Generic response prevents email enumeration attacks. If Brevo API is configured, an email with a secure 1-hour expiration link is dispatched. In local dev mode without Brevo credentials, the reset link is logged to server console).*
+
+---
+
+### 1.8 Reset Password with Token
+
+- **URL:** `POST /api/auth/reset-password`
+- **Auth Required:** No
+- **Request Body:**
+  ```json
+  {
+    "email": "user@example.com",
+    "token": "b3f5a8947e914d79...",
+    "newPassword": "newSecurePassword456"
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "Password reset successfully. You may now sign in with your new password."
+  }
+  ```
+- **Error Responses:**
+  - `400 Bad Request`: `{ "error": "Invalid or expired password reset link. Please request a new one." }`
+
+---
+
 ## 2. Schedule Grid Endpoints (`/api/schedule`)
 
 ### 2.1 Fetch Weekly Schedule Slots

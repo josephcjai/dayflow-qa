@@ -24,6 +24,9 @@ services:
     environment:
       PORT: 5000
       NODE_ENV: production
+      # 2026-09-21: set (as a correctly configured deployment would) so prodcheck/16 can prove APP_URL
+      # wins over an attacker-supplied Origin header when building password-reset links.
+      APP_URL: https://dayflow-qa.example
       JWT_SECRET: ${JWT_SECRET:-qa-test-only-secret-do-not-use-in-prod}
       ALLOWED_ORIGINS: ${QA_WEB_ORIGIN:-http://dayflow-qa.local:8280}
       DB_HOST: postgres-qa

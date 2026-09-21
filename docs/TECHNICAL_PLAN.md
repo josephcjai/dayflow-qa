@@ -17,7 +17,7 @@ a large "production hardening" push (Helmet, CORS, a decoupled migration script,
 proxy config, graceful shutdown, error-message masking), a new date-specific Daily Journal note
 sheet, and as of this round the Finding 06/07 fixes plus a Month-view prefetch perf fix — with no
 new tag cut for any of them yet, despite the dev team's own 2026-09-20 reply saying "Tag `v2.4.0`
-is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`63498c7`);
+is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`8fbc404`);
 `checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
 `git clone --branch` doesn't accept one. **Resolved 2026-09-20:** after being asked nine times, the
 dev team cut tag `v2.4.0` (= `91a595c`); `DAYFLOW_PINNED_REF` now holds `v2.4.0` and the SHA-fetch
@@ -176,6 +176,19 @@ unconditionally assigns `weekData.noteSheets` from the server, replacing text ty
 response lands. New **Finding 09**: `saveNotes` never throws (returns `false`), so
 `flushCurrentNoteEditor`'s catch is unreachable — a failed save reads "Saved" and is never
 retried. See [reports/2026-09-20-qa-retest-2.md](../reports/2026-09-20-qa-retest-2.md).
+
+**UPDATE 2026-09-21 (commit `8fbc404`, pin now `8fbc404`): change / forgot / reset password.**
+Strict pre-production review — see [reports/2026-09-21-qa-password-management.md](../reports/2026-09-21-qa-password-management.md).
+Findings **13–22**: `password_reset_tokens` missing from `schema.sql` (forgot-password 500s; guard:
+`npm run schema:check`), reset-link host from `Origin`/`Referer` when `APP_URL` unset (mitigated
+when set), sessions survive change/reset, non-string inputs → 500, live tokens in logs without a
+mail key, forgot-password timing channel, docs drift, bcrypt 72-byte truncation, `hasPassword` not
+delivered to the UI, token left in URL. New: `api/15-password-management.spec.ts`,
+`prodcheck/16-password-production.spec.ts`, `e2e/forgot-password.spec.ts`,
+`e2e/change-password.spec.ts`, `shared/mailbox.ts` (reads the emailed link from the API log — QA
+has no mail server). Known defects are held as `it.fails`/`test.fail` markers that flip loudly when
+fixed. `api-qa` now runs `migrate.js` before the server (mirrors production compose); `test:e2e`
+is three batches.
 
 **UPDATE 2026-09-20 (fifth retest, commit `74dda2b`; `DAYFLOW_PINNED_REF` is a SHA again because
 the dev team's named target `v2.4.1` has not been tagged):** **Finding 12 fixed** and verified

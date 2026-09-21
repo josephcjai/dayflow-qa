@@ -33,6 +33,11 @@ or renaming a test).
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
 suggestions for whatever the suite turned up on a given run.
 
+- [2026-09-21-qa-password-management.md](reports/2026-09-21-qa-password-management.md) — strict
+  pre-production review of change/forgot/reset password (commit `8fbc404`): **verdict — not ready to
+  deploy as-is**; **10 new findings** incl. reset-link poisoning via Origin/Referer (14), a missing
+  `schema.sql` table that 500s forgot-password (13), sessions surviving resets (15); 151 checks + 11
+  known-defect markers.
 - [2026-09-20-qa-retest-5.md](reports/2026-09-20-qa-retest-5.md) — fifth retest: **Finding 12
   confirmed fixed**, verified against reload-during-outage, two-failed-weeks and launch-retry edge
   cases; **no new findings, no expected-failure markers left**, 119/119 checks, no flakes.
@@ -105,7 +110,7 @@ client — a real DayFlow gap, fixed 2026-08-31, see
 [reports/2026-08-31-qa-retest.md](reports/2026-08-31-qa-retest.md). What's left is just the
 limiter doing its job against a shared environment, not a bug.)
 
-**`npm run test:e2e` now runs in two batches with a `stack:reset-api` in between**, as of
+**`npm run test:e2e` now runs in three batches (two until 2026-09-21) with a `stack:reset-api` in between**, as of
 2026-09-17. The suite has grown enough (24 registrations/logins across 9 files at last count) that
 a single clean run started brushing up against the very same shared 50-attempts/15-min budget
 `api/13-proxy.spec.ts` exercises above — confirmed live with a direct 429 probe against nginx-qa
