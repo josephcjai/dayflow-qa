@@ -17,7 +17,7 @@ a large "production hardening" push (Helmet, CORS, a decoupled migration script,
 proxy config, graceful shutdown, error-message masking), a new date-specific Daily Journal note
 sheet, and as of this round the Finding 06/07 fixes plus a Month-view prefetch perf fix — with no
 new tag cut for any of them yet, despite the dev team's own 2026-09-20 reply saying "Tag `v2.4.0`
-is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`0563993`);
+is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`165bd81`);
 `checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
 `git clone --branch` doesn't accept one. **Resolved 2026-09-20:** after being asked nine times, the
 dev team cut tag `v2.4.0` (= `91a595c`); `DAYFLOW_PINNED_REF` now holds `v2.4.0` and the SHA-fetch
@@ -177,7 +177,15 @@ response lands. New **Finding 09**: `saveNotes` never throws (returns `false`), 
 `flushCurrentNoteEditor`'s catch is unreachable — a failed save reads "Saved" and is never
 retried. See [reports/2026-09-20-qa-retest-2.md](../reports/2026-09-20-qa-retest-2.md).
 
-**UPDATE 2026-09-21 (retest, commit `0563993`; pin now `0563993`):** findings 13, 14, 15, 16, 20, 21,
+**UPDATE 2026-09-21 (second retest, commit `165bd81`; pin now `165bd81`):** 17, 19, 23, 24 **fixed and
+verified**; 18 one doc string short. New: **25** (login now rejects >72-byte passwords, locking out accounts that
+predate the rule — only their first 72 chars work), **26** (login timing ~20× reveals registered emails),
+**27** (register email >255 chars → 500), **28** (a reset token can be spent 2–7× concurrently — 14/14 tokens
+at 8 parallel requests; **this corrects QA's earlier "single-use even under a race" claim**, which used only 5).
+See [reports/2026-09-21-qa-password-management-retest-2.md](../reports/2026-09-21-qa-password-management-retest-2.md).
+`shared/legacyAccount.ts` is the one documented exception to "public API only" (models data that predates a rule).
+
+**UPDATE 2026-09-21 (retest, commit `0563993`; pin then `0563993`):** findings 13, 14, 15, 16, 20, 21,
 22 **fixed and verified** (see [reports/2026-09-21-qa-password-management-retest.md](../reports/2026-09-21-qa-password-management-retest.md));
 **17** (timing, still ~2.2×), **18** (§1.8 doc strings don't match the API) not resolved; **19** partly (72 limit counts
 characters, bcrypt counts bytes); new **23** (register displayName unvalidated) and **24** (session-version check fails

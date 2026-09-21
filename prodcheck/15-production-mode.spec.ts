@@ -91,15 +91,18 @@ describe('Production mode (NODE_ENV=production) — masking behavior with a brok
     expect(res.body.error).not.toMatch(/password authentication failed/i);
   });
 
-  it('a DB-touching authenticated route throws and returns a masked 500 — NOT a silent fallback to fabricated data', async () => {
+  it('a DB-touching authenticated route fails closed with a masked 503 — NOT a silent fallback to fabricated data', async () => {
     const authed = badDbApi.as(tokenFromGoodContainer);
     const res = await authed.get('/todos/week/2026-01-05');
     // In NODE_ENV=test (the regular api-qa container), this exact scenario (a DB error mid-request)
     // would silently fall back to the in-memory store and return 200 with whatever's in memory —
-    // that fallback path is exactly what production mode now refuses to take.
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe('Internal server error');
-    expect(res.body.error).not.toMatch(/password authentication failed|ECONNREFUSED|pg_hba/i);
+    // that fallback path is exactly what production mode refuses to take.
+    // UPDATED 2026-09-21 (165bd81, Finding 24): this used to be a masked 500 from the route itself. The
+    // auth middleware's session-version lookup now fails CLOSED first, so the request is refused with a
+    // 503 before any route runs — same guarantee (nothing fabricated, nothing leaked), better status.
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/temporarily unavailable/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/password authentication failed|ECONNREFUSED|pg_hba/i);
   });
 
   it('registration itself fails loudly (masked 500) rather than silently succeeding via the memory-store fallback', async () => {

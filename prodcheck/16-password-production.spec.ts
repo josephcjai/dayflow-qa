@@ -76,23 +76,25 @@ describe('password management under NODE_ENV=production', () => {
     expect(login.body.user.hasPassword).toBe(true);
   });
 
-  // Finding 24 — the session-version check fails OPEN when its DB lookup errors. With the DB
-  // unreachable (-baddb), a token that was REVOKED (its password was changed on the healthy
-  // container) should still be refused; instead the middleware swallows the lookup error, accepts
-  // it at version 1, and the request reaches the route (which then 500s).
-  it.fails('a revoked session token is still refused when the version lookup cannot reach the DB — fail closed (Finding 24)', async () => {
+  // Finding 24 (fixed in 165bd81) — the session-version check used to fail OPEN. With the DB unreachable
+  // (-baddb), a token REVOKED by a password change on the healthy container must still be refused.
+  it('with the DB unreachable, a revoked session token gets a 503 (fail closed) and nothing internal leaks (Finding 24)', async () => {
     const u = await registerTestUser(api);
     const revoked = u.token; // version 1
     const change = await u.client.post('/auth/change-password', { currentPassword: u.password, newPassword: 'BrandNewPassw0rd!' });
     expect(change.status).toBe(200);
     const res = await badDb.as(revoked).get('/todos/week/2026-09-07');
-    expect([401, 503]).toContain(res.status); // today: 500 — the middleware let it through to the route
+    expect(res.status).toBe(503);
+    expect(JSON.stringify(res.body)).not.toMatch(/password authentication failed|ECONNREFUSED|pg_hba|token_version/i);
+    // ...and so does a CURRENT token: no route can be reached while the session cannot be verified
+    const current = await badDb.as(change.body.token).get('/todos/week/2026-09-07');
+    expect(current.status).toBe(503);
   });
 
-  it('with the DB down, a token for a user version the middleware cannot verify still cannot read data (route fails, nothing fabricated)', async () => {
+  it('with the DB down, a forged token for an unknown user cannot read data (nothing fabricated, nothing leaked)', async () => {
     const t = signQaJwt({ userId: '00000000-0000-0000-0000-000000000000', email: 'x@dayflow-qa.test', tokenVersion: 1 });
     const res = await badDb.as(t).get('/todos/week/2026-09-07');
-    expect(res.status).toBeGreaterThanOrEqual(401);
+    expect([401, 503]).toContain(res.status);
     expect(JSON.stringify(res.body)).not.toMatch(/password authentication failed|ECONNREFUSED|pg_hba/i);
   });
 });

@@ -49,10 +49,20 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
     "user": {
       "id": "e4f8b6b1-0987-4321-abcd-123456789abc",
       "email": "user@example.com",
-      "displayName": "User Name"
+      "displayName": "User Name",
+      "hasPassword": true
     }
   }
   ```
+- **Error Responses:**
+  - `400 Bad Request`:
+    - `{ "error": "Email and password are required" }`
+    - `{ "error": "Display name must be a string" }`
+    - `{ "error": "Display name cannot exceed 100 characters" }`
+    - `{ "error": "Password must be at least 6 characters long" }`
+    - `{ "error": "Password cannot exceed 72 characters" }`
+    - `{ "error": "Password cannot exceed 72 bytes" }`
+    - `{ "error": "An account with this email already exists. Please sign in." }`
 
 ---
 
@@ -74,16 +84,18 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
     "user": {
       "id": "e4f8b6b1-0987-4321-abcd-123456789abc",
       "email": "user@example.com",
-      "displayName": "User Name"
+      "displayName": "User Name",
+      "hasPassword": true
     }
   }
   ```
-- **Error Response (401 Unauthorized):**
-  ```json
-  {
-    "error": "Invalid email or password."
-  }
-  ```
+- **Error Responses:**
+  - `400 Bad Request`:
+    - `{ "error": "Email and password are required" }`
+    - `{ "error": "Email and password must be valid strings" }`
+  - `401 Unauthorized`:
+    - `{ "error": "Invalid email or password." }`
+    - `{ "error": "This account was created with Google Sign-In. Please continue with Google." }`
 
 ---
 
@@ -103,6 +115,10 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
     }
   }
   ```
+- **Error Responses:**
+  - `401 Unauthorized`: `{ "error": "Unauthorized access. Authentication token required." }`
+  - `404 Not Found`: `{ "error": "User profile not found" }`
+  - `503 Service Unavailable`: `{ "error": "Database service is temporarily unavailable. Please try again later." }`
 
 ---
 
@@ -170,8 +186,22 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
   }
   ```
 - **Error Responses:**
-  - `400 Bad Request`: `{ "error": "Current password is incorrect" }` or validation errors (e.g. password length 6–72 chars)
-  - `401 Unauthorized`: `{ "error": "Unauthorized access. Authentication token required." }`
+  - `400 Bad Request`:
+    - `{ "error": "Current password must be a string" }`
+    - `{ "error": "New password must be at least 6 characters long" }`
+    - `{ "error": "Password cannot exceed 72 characters" }`
+    - `{ "error": "Password cannot exceed 72 bytes" }`
+    - `{ "error": "Current password is required to set a new password" }`
+    - `{ "error": "Current password is incorrect" }`
+  - `401 Unauthorized`:
+    - `{ "error": "Unauthorized access. Authentication token required." }`
+    - `{ "error": "Session expired or invalidated. Please sign in again." }`
+    - `{ "error": "Session expired or invalid token. Please sign in again." }`
+    - `{ "error": "Unauthorized access. Invalid user identifier." }`
+    - `{ "error": "Unauthorized access. User no longer exists." }`
+    - `{ "error": "Unauthorized access. User session could not be verified." }`
+  - `503 Service Unavailable`:
+    - `{ "error": "Database service is temporarily unavailable. Please try again later." }`
 
 ---
 
@@ -192,6 +222,9 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
   }
   ```
   *(Generic response prevents email enumeration attacks. If Brevo API is configured, an email with a secure 1-hour expiration link is dispatched. In production, unconfigured email service returns 503 Service Unavailable. In local dev mode without Brevo credentials, the reset link is logged to server console).*
+- **Error Responses:**
+  - `400 Bad Request`: `{ "error": "Valid email address is required" }`
+  - `503 Service Unavailable`: `{ "error": "Email delivery service is currently unavailable. Please try again later." }`
 
 ---
 
@@ -215,9 +248,13 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
   ```
 - **Error Responses:**
   - `400 Bad Request`:
-    - `{ "error": "Invalid or used password reset link. Please request a new one." }`
-    - `{ "error": "Password reset link has expired. Please request a new one." }`
-    - Validation errors (e.g. non-string inputs, password length 6–72 chars)
+    - `{ "error": "Email, reset token, and new password are required" }`
+    - `{ "error": "Email, token, and new password must be valid strings" }`
+    - `{ "error": "Password must be at least 6 characters long" }`
+    - `{ "error": "Password cannot exceed 72 characters" }`
+    - `{ "error": "Password cannot exceed 72 bytes" }`
+    - `{ "error": "This password reset link is invalid or has already been used. Please request a new one." }`
+    - `{ "error": "This password reset link has expired. Password reset links are valid for 1 hour." }`
 
 ---
 
