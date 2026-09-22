@@ -17,7 +17,7 @@ a large "production hardening" push (Helmet, CORS, a decoupled migration script,
 proxy config, graceful shutdown, error-message masking), a new date-specific Daily Journal note
 sheet, and as of this round the Finding 06/07 fixes plus a Month-view prefetch perf fix — with no
 new tag cut for any of them yet, despite the dev team's own 2026-09-20 reply saying "Tag `v2.4.0`
-is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`165bd81`);
+is ready to be cut." `DAYFLOW_PINNED_REF` now holds the exact 40-char commit SHA (`448ea06`);
 `checkout-dev-ref.mjs` fetches an exact SHA directly (`git fetch --depth 1 origin <sha>`) since
 `git clone --branch` doesn't accept one. **Resolved 2026-09-20:** after being asked nine times, the
 dev team cut tag `v2.4.0` (= `91a595c`); `DAYFLOW_PINNED_REF` now holds `v2.4.0` and the SHA-fetch
@@ -177,7 +177,16 @@ response lands. New **Finding 09**: `saveNotes` never throws (returns `false`), 
 `flushCurrentNoteEditor`'s catch is unreachable — a failed save reads "Saved" and is never
 retried. See [reports/2026-09-20-qa-retest-2.md](../reports/2026-09-20-qa-retest-2.md).
 
-**UPDATE 2026-09-21 (second retest, commit `165bd81`; pin now `165bd81`):** 17, 19, 23, 24 **fixed and
+**UPDATE 2026-09-22 (third retest, commit `448ea06`; pin now `448ea06`):** **18, 25, 26, 27, 28 all
+fixed and verified.** This closes every finding raised across the whole password-management review
+(13 through 28) — `api/15-password-management.spec.ts` has zero `it.fails` markers left. No new
+findings, despite deliberately probing the edges of each fix (a wrong long password against a
+simulated legacy account, boundary email lengths, higher-concurrency token races, three-way login
+timing). Two bugs were found and fixed in QA's own new tests along the way (a non-unique boundary
+email across runs, and a token-ordering mistake) — recorded in the report, not app defects. See
+[reports/2026-09-22-qa-password-management-retest-3.md](../reports/2026-09-22-qa-password-management-retest-3.md).
+
+**UPDATE 2026-09-21 (second retest, commit `165bd81`; pin then `165bd81`):** 17, 19, 23, 24 **fixed and
 verified**; 18 one doc string short. New: **25** (login now rejects >72-byte passwords, locking out accounts that
 predate the rule — only their first 72 chars work), **26** (login timing ~20× reveals registered emails),
 **27** (register email >255 chars → 500), **28** (a reset token can be spent 2–7× concurrently — 14/14 tokens

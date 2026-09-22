@@ -33,6 +33,10 @@ or renaming a test).
 Dated findings reports for the dev team live in [reports/](reports/) — repro steps, evidence, and
 suggestions for whatever the suite turned up on a given run.
 
+- [2026-09-22-qa-password-management-retest-3.md](reports/2026-09-22-qa-password-management-retest-3.md)
+  — third retest (`448ea06`): **18, 25, 26, 27, 28 all verified fixed**. This closes every finding
+  raised across the whole password-management review (13–28); zero known-defect markers remain;
+  166 checks, prod-mode 13/13, no new findings.
 - [2026-09-21-qa-password-management-retest-2.md](reports/2026-09-21-qa-password-management-retest-2.md)
   — second retest (`165bd81`): **17, 19, 23, 24 verified fixed**, 18 one string short; **4 new findings**
   incl. a reset token that can be spent several times concurrently (28 — also corrects an earlier QA

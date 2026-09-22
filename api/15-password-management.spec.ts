@@ -12,11 +12,17 @@
  * Rate-limit budget: /auth/* shares one 50-attempt/15-min bucket per IP; each describe gets a fresh
  * one (freshAuthRateLimitBucket restarts api-qa; no data lost) plus one at the end.
  *
- * Findings still open after 0563993 are held with `it.fails` (asserts the CORRECT behaviour; passes
- * while the bug exists; goes red when fixed → convert to a plain `it`). Numbers refer to
- * reports/2026-09-21-*.md. Fixed and plain `it` now: 14, 15, 16, 21 (0563993); 17, 19, 23, 24 (165bd81).
- * Still open: 18 (one doc string), 25 (legacy long-password accounts locked out), 26 (login timing
- * oracle), 27 (register email length -> 500), 28 (reset-token double-spend race).
+ * `it.fails` marks a known-open defect: it asserts the CORRECT behaviour, passes while the bug
+ * exists, and goes red when fixed → convert to a plain `it`. Numbers refer to reports/2026-09-21-*.md.
+ * Fixed and plain `it`: 14, 15, 16, 21 (0563993); 17, 19, 23, 24 (165bd81); 18, 25, 26, 27, 28 (448ea06).
+ * All findings from this feature are closed as of 448ea06 — no `it.fails` remain in this file.
+ *
+ * Finding 25's fix (login truncates a >72-byte password to its first 72 bytes before comparing,
+ * matching bcrypt's own historical behaviour) reintroduces bcrypt's ordinary 72-byte equivalence for
+ * LEGACY accounts only: two different >72-byte passwords sharing the same first 72 bytes both work.
+ * Confirmed live and treated as expected, not a new finding — it is exactly the trade-off requesting
+ * this fix implied (any password a legacy account could always log in with must keep working), and
+ * register/change/reset still refuse to CREATE a new password over 72 bytes.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -166,16 +172,23 @@ describe('password length limits (Findings 19, 25)', () => {
   });
 
   // Finding 25 (new) — the rule above also makes login refuse ANY password over 72 bytes, including
-  // the real password of an account created back when that was legal. Such a user is told "Invalid
-  // email or password" (only the first 72 characters still work, which they cannot know). The
-  // historical account is simulated with shared/legacyAccount.ts (the one documented exception to
-  // "public API only").
-  it.fails('an account created before the 72-byte rule can still sign in with its own (long) password (Finding 25)', async () => {
+  // the real password of an account created back when that was legal. The historical account is
+  // simulated with shared/legacyAccount.ts (the one documented exception to "public API only").
+  it('an account created before the 72-byte rule can still sign in with its own (long) password (Finding 25, fixed in 448ea06)', async () => {
     const u = await registerTestUser();
     const longPassword = 'L'.repeat(80);
     setStoredPasswordDirectly(u.id, longPassword);
-    const res = await api.post('/auth/login', { email: u.email, password: longPassword });
-    expect(res.status).toBe(200);
+    expect((await api.post('/auth/login', { email: u.email, password: longPassword })).status).toBe(200);
+    // a DIFFERENT long password is still correctly rejected — only a byte-for-byte truncated match works
+    expect((await api.post('/auth/login', { email: u.email, password: 'X'.repeat(80) })).status).toBe(401);
+  });
+
+  // A short-password account must be completely unaffected by the truncate-before-compare change:
+  // appending garbage past 72 bytes must not let a wrong password through.
+  it('a normal (short) password account is unaffected by the login truncation fix', async () => {
+    const u = await registerTestUser();
+    expect((await api.post('/auth/login', { email: u.email, password: u.password })).status).toBe(200);
+    expect((await api.post('/auth/login', { email: u.email, password: u.password + 'x'.repeat(80) })).status).toBe(401);
   });
 });
 
@@ -271,13 +284,19 @@ describe('register / login validation and hasPassword (Findings 19, 21)', () => 
     expect(ok.status).toBe(200);
   });
 
-  // Finding 27 (new, Low; pre-existing) — the same "unvalidated length -> raw DB 500" class, on email:
-  // users.email is varchar(255) and register only checks the type.
-  it.fails('register rejects an email longer than 255 characters with a 400, not a 500 (Finding 27)', async () => {
+  // Finding 27 (fixed in 448ea06) — same class as displayName: users.email is varchar(255).
+  it('register rejects an email longer than 255 characters with a 400, accepts exactly 255 (Finding 27)', async () => {
     for (const local of ['e'.repeat(249), 'e'.repeat(290)]) {
       const res = await api.post('/auth/register', { email: `${local}@x.test`, password: 'abcdefg' });
       expect(res.status, `email length ${local.length + 7}`).toBe(400);
     }
+    // Unique per run (a fixed literal collided with a previous run's own leftover account, since
+    // stack:reset-api restarts only the API container — Postgres data persists between runs) but
+    // padded to exactly 255 characters total.
+    const suffix = `${Date.now()}@x.test`;
+    const boundary = 'e'.repeat(255 - suffix.length) + suffix;
+    expect(boundary.length).toBe(255);
+    expect((await api.post('/auth/register', { email: boundary, password: 'abcdefg' })).status).toBe(200);
   });
 });
 
@@ -438,15 +457,14 @@ describe('reset token single-use (Finding 28)', () => {
     await freshAuthRateLimitBucket();
   });
 
-  // Finding 28 (new — and a CORRECTION to QA's own earlier report). The 2026-09-21 review listed "a
-  // reset token is single-use even under a concurrent race" as verified-correct, based on 5 concurrent
-  // requests that happened to serialise. Re-run at 8 concurrent requests, ONE token was accepted 2-7
-  // times in 14 of 14 trials: the route reads the token (used = false), then hashes the new password
-  // (bcrypt, ~60-100 ms), and only afterwards sets used = TRUE — every request that arrives inside that
-  // window passes the check. Each success also bumps token_version, and the LAST writer's password wins.
-  // Fix: consume the token atomically (UPDATE ... SET used = TRUE WHERE id = $1 AND used = FALSE
-  // RETURNING id, and proceed only if a row came back).
-  it.fails('concurrent use of one token succeeds exactly once (no double-spend race) (Finding 28)', async () => {
+  // Finding 28 (fixed in 448ea06) — was: the route read the token (used = false), then hashed the new
+  // password (bcrypt, ~60-100 ms), and only afterwards set used = TRUE, so every request arriving in
+  // that window passed the check (14/14 tokens double-spent at 8-way concurrency during the retest that
+  // found it — see reports/2026-09-21-qa-password-management-retest-2.md). Fix: consume the token
+  // atomically (UPDATE ... SET used = TRUE WHERE id = $1 AND used = FALSE RETURNING id) BEFORE hashing.
+  // Re-verified at higher concurrency (10-way, 5 fresh tokens, 0/5 double-spent) in addition to the
+  // 3x8-way check below.
+  it('concurrent use of one token succeeds exactly once (no double-spend race) (Finding 28)', async () => {
     // Three independent tokens, 8 concurrent requests each; the scheduling is not deterministic (in a
     // 14-token trial 100% double-spent, but an individual token can occasionally be serialised by
     // luck), so EVERY token must be spent exactly once. 3 x (1 + 8) + 3 registrations stays inside
@@ -479,10 +497,10 @@ describe('account-existence timing on login (Finding 26)', () => {
     await freshAuthRateLimitBucket();
   });
 
-  // Finding 26 (new; pre-existing) — forgot-password now pads every response to 100 ms, but /login still
-  // only runs bcrypt when the email exists: ~65 ms vs ~3 ms with an identical 401 body, a ~20x oracle
-  // that makes the padding above pointless for an attacker who can simply try to log in.
-  it.fails('login latency for a wrong password does not reveal whether the email is registered (Finding 26)', async () => {
+  // Finding 26 (fixed in 448ea06) — was: forgot-password padded every response to 100 ms, but /login
+  // only ran bcrypt when the email existed (~65 ms vs ~3 ms, ~20x). Fix: /login now always runs one
+  // bcrypt.compare — against the real hash if there is one, otherwise against a fixed dummy hash.
+  it('login latency for a wrong password does not reveal whether the email is registered (Finding 26)', async () => {
     const u = await registerTestUser();
     const time = async (email: string) => {
       const s = performance.now();
@@ -505,10 +523,11 @@ describe('documented contract vs. real responses (docs/API_DOCUMENTATION.md sect
     await freshAuthRateLimitBucket();
   });
 
-  // Finding 18 (nearly fixed in 165bd81): every message but ONE now appears verbatim — the reset-password
-  // SUCCESS message still differs from the documented one. Rule enforced: every message the API really
-  // returns for these endpoints must appear verbatim in the documented section.
-  it.fails('every message the API returns for change/forgot/reset appears verbatim in the docs (Finding 18)', async () => {
+  // Finding 18 (fixed in 448ea06): the reset-password SUCCESS message now matches the docs too — every
+  // message the API returns for these endpoints appears verbatim in the documented section. Permanent
+  // regression guard: whenever a new message is added here, it must be added to the docs in the same
+  // commit or this test catches the drift immediately (the pattern that took 3 rounds to fully close).
+  it('every message the API returns for change/forgot/reset appears verbatim in the docs (Finding 18)', async () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const doc = readFileSync(path.resolve(here, '..', 'contract', 'API_CONTRACT.md'), 'utf8');
     const start = doc.indexOf('### 1.1');
@@ -517,13 +536,17 @@ describe('documented contract vs. real responses (docs/API_DOCUMENTATION.md sect
     expect(start).toBeGreaterThan(-1);
 
     const u = await registerTestUser();
+    // requestReset's own token must be the LAST thing consumed for it — a second forgot-password call
+    // for the same email invalidates the previous unused token (confirmed correct app behaviour
+    // elsewhere in this file), so getting 'reset success' first avoided a self-inflicted false failure.
     const link = await requestReset(u.email);
+    const resetSuccessMsg = (await api.post('/auth/reset-password', { email: u.email, token: link.token, newPassword: NEW_PW })).body.message;
     const real: Record<string, string> = {
+      'reset success': resetSuccessMsg,
       'forgot-password success': (await api.post('/auth/forgot-password', { email: u.email })).body.message,
       'unauthenticated change-password': (await api.post('/auth/change-password', { currentPassword: 'x', newPassword: 'abcdefg' })).body.error,
       'wrong current password': (await u.client.post('/auth/change-password', { currentPassword: 'nope-nope', newPassword: NEW_PW })).body.error,
       'invalid/used reset token': (await api.post('/auth/reset-password', { email: u.email, token: 'f'.repeat(64), newPassword: NEW_PW })).body.error,
-      'reset success': (await api.post('/auth/reset-password', { email: u.email, token: link.token, newPassword: NEW_PW })).body.message,
       'password over 72 bytes': (await api.post('/auth/register', { email: `doc-${Date.now()}@dayflow-qa.test`, password: 'é'.repeat(40) })).body.error,
       'displayName not a string': (await api.post('/auth/register', { email: `doc2-${Date.now()}@dayflow-qa.test`, password: 'abcdefg', displayName: { a: 1 } })).body.error,
       'revoked session': (await api.as(signQaJwt({ userId: u.id, email: u.email, tokenVersion: 99 })).get('/auth/me')).body.error,

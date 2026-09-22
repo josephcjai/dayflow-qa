@@ -57,6 +57,8 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
 - **Error Responses:**
   - `400 Bad Request`:
     - `{ "error": "Email and password are required" }`
+    - `{ "error": "Email and password must be valid strings" }`
+    - `{ "error": "Email address cannot exceed 255 characters" }`
     - `{ "error": "Display name must be a string" }`
     - `{ "error": "Display name cannot exceed 100 characters" }`
     - `{ "error": "Password must be at least 6 characters long" }`
@@ -243,7 +245,7 @@ All date parameters across the API (`weekStart`, `dueDate`, `slotKey` date prefi
 - **Success Response (200 OK):**
   ```json
   {
-    "message": "Password reset successfully. You may now sign in with your new password."
+    "message": "Password has been reset successfully. You can now sign in with your new password."
   }
   ```
 - **Error Responses:**
